@@ -11,6 +11,7 @@ serde.workspace = true
 
 [dev-dependencies]
 hex-literal.workspace = true
+serde_derive.workspace = true
 
 [lints]
 workspace = true
