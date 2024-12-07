@@ -34,7 +34,16 @@
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 extern crate alloc;
 
+mod de;
 mod error;
 
+pub mod read;
+
+#[doc(inline)]
+pub use de::{from_slice, Deserializer};
 #[doc(inline)]
 pub use error::{Error, ErrorKind, Result};
+
+#[doc(inline)]
+#[cfg(feature = "std")]
+pub use de::from_reader;

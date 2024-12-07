@@ -158,6 +158,7 @@ version = "0.0.0"
 dependencies = [
  "hex-literal",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]
