@@ -1,0 +1,201 @@
+//! Possible crate errors.
+
+use serde::{de, ser};
+
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+};
+#[cfg(feature = "std")]
+use std::{
+    boxed::Box,
+    error, format,
+    string::{String, ToString},
+};
+
+use core::{
+    fmt::{self, Display},
+    result,
+};
+
+/// Alias for a [`Result`][std::result::Result] with a [`ohcbor::Error`][Error] error type.
+pub type Result<T> = result::Result<T, Error>;
+
+/// Errors during serialization and deserialization.
+pub struct Error {
+    inner: Box<ErrorImpl>,
+}
+
+impl Error {
+    /// Constructs an error with the kind and the byte offset where the error
+    /// was detected.
+    ///
+    /// A byte offset value of `0` indicates that the byte offset is either
+    /// unknown or not relevant.
+    #[must_use]
+    #[inline]
+    pub fn new(kind: ErrorKind, byte_offset: usize) -> Self {
+        Self {
+            inner: Box::new(ErrorImpl { kind, byte_offset }),
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) fn with_kind(kind: ErrorKind) -> Self {
+        Self::new(kind, 0)
+    }
+
+    /// The kind of error encountered
+    #[must_use]
+    #[inline]
+    pub fn kind(&self) -> &ErrorKind {
+        &self.inner.kind
+    }
+
+    /// The byte offset where the error was detected.
+    ///
+    /// A byte offset value of `0` indicates that the byte offset is either
+    /// unknown or not relevant.
+    #[must_use]
+    #[inline]
+    pub fn byte_offset(&self) -> usize {
+        self.inner.byte_offset
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.inner, f)
+    }
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(&self.inner, f)
+    }
+}
+
+impl de::StdError for Error {
+    #[cfg(feature = "std")]
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        self.inner.kind.source()
+    }
+}
+
+impl de::Error for Error {
+    fn custom<T: Display>(msg: T) -> Self {
+        Error::with_kind(ErrorKind::Deserialize(msg.to_string()))
+    }
+
+    fn invalid_type(unexp: de::Unexpected<'_>, exp: &dyn de::Expected) -> Self {
+        Error::with_kind(ErrorKind::Deserialize(format!(
+            "unexpected type error. invalid_type={unexp}, expected_type={exp}"
+        )))
+    }
+}
+
+impl ser::Error for Error {
+    fn custom<T: Display>(msg: T) -> Self {
+        Error::with_kind(ErrorKind::Serialize(msg.to_string()))
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<Error> for std::io::Error {
+    fn from(error: Error) -> Self {
+        if let ErrorKind::Io(error) = error.inner.kind {
+            return error;
+        }
+        std::io::Error::new(std::io::ErrorKind::Other, error.to_string())
+    }
+}
+
+struct ErrorImpl {
+    kind: ErrorKind,
+    byte_offset: usize,
+}
+
+impl Display for ErrorImpl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.byte_offset == 0 {
+            Display::fmt(&self.kind, f)
+        } else {
+            write!(f, "{} at byte offset {}", self.kind, self.byte_offset)
+        }
+    }
+}
+
+impl fmt::Debug for ErrorImpl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Error")
+            .field("kind", &self.kind)
+            .field("byte_offset", &self.byte_offset)
+            .finish()
+    }
+}
+
+/// All possible crate errors.
+#[expect(clippy::module_name_repetitions)]
+// Should the type be non_exhaustive? Probably if this crate was version 1.0+ but would need to bump MSRV to 1.40.0
+// #[non_exhaustive]
+pub enum ErrorKind {
+    /// General deserialization error.
+    ///
+    /// Usually the error is due to mismatching types (e.g. a struct was expecting an u64 but the data had a string).
+    Deserialize(String),
+    /// End of file was encountered while parsing a value.
+    EofWhileParsingValue,
+    /// Unparsed trailing data was detected
+    TrailingData,
+    #[cfg(feature = "std")]
+    /// An I/O error.
+    Io(std::io::Error),
+    /// General serialization error.
+    Serialize(String),
+    /// An unsupported type was used during serialization.
+    UnsupportedType,
+}
+
+#[cfg(feature = "std")]
+impl error::Error for ErrorKind {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            ErrorKind::Deserialize(_)
+            | ErrorKind::EofWhileParsingValue
+            | ErrorKind::TrailingData
+            | ErrorKind::Serialize(_)
+            | ErrorKind::UnsupportedType => None,
+            #[cfg(feature = "std")]
+            ErrorKind::Io(source) => Some(source),
+        }
+    }
+}
+
+impl Display for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ErrorKind::Deserialize(str) | ErrorKind::Serialize(str) => f.write_str(str),
+            ErrorKind::EofWhileParsingValue => f.write_str("eof while parsing value"),
+            ErrorKind::TrailingData => f.write_str("trailing data error"),
+            ErrorKind::UnsupportedType => f.write_str("unsupported type"),
+            #[cfg(feature = "std")]
+            ErrorKind::Io(source) => Display::fmt(source, f),
+        }
+    }
+}
+
+impl fmt::Debug for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ErrorKind::Deserialize(str) | ErrorKind::Serialize(str) => f.write_str(str),
+            ErrorKind::EofWhileParsingValue => f.write_str("eof while parsing value"),
+            ErrorKind::TrailingData => f.write_str("trailing data error"),
+            ErrorKind::UnsupportedType => f.write_str("unsupported type"),
+            #[cfg(feature = "std")]
+            ErrorKind::Io(source) => fmt::Debug::fmt(source, f),
+        }
+    }
+}
