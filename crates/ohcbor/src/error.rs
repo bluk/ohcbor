@@ -19,6 +19,7 @@ use core::{
     error,
     fmt::{self, Display},
     result,
+    str::Utf8Error,
 };
 
 /// Alias for a [`Result`][std::result::Result] with a [`ohcbor::Error`][Error] error type.
@@ -164,6 +165,10 @@ pub enum ErrorKind {
     UnsupportedType,
     /// When deserializing a byte string, the length was not a valid number.
     InvalidByteStrLen,
+    /// When deserializing a text string, the length was not a valid number.
+    InvalidTextStrLen,
+    /// Invalid UTF-8
+    InvalidUtf8Error(Utf8Error),
 }
 
 impl Display for ErrorKind {
@@ -176,6 +181,8 @@ impl Display for ErrorKind {
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => Display::fmt(source, f),
             ErrorKind::InvalidByteStrLen => f.write_str("invalid byte string length"),
+            ErrorKind::InvalidTextStrLen => f.write_str("invalid text string length"),
+            ErrorKind::InvalidUtf8Error(source) => Display::fmt(source, f),
         }
     }
 }
@@ -190,6 +197,8 @@ impl fmt::Debug for ErrorKind {
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => fmt::Debug::fmt(source, f),
             ErrorKind::InvalidByteStrLen => f.write_str("invalid byte string length"),
+            ErrorKind::InvalidTextStrLen => f.write_str("invalid text string length"),
+            ErrorKind::InvalidUtf8Error(source) => Display::fmt(source, f),
         }
     }
 }
@@ -202,9 +211,11 @@ impl error::Error for ErrorKind {
             | ErrorKind::TrailingData
             | ErrorKind::Serialize(_)
             | ErrorKind::UnsupportedType
-            | ErrorKind::InvalidByteStrLen => None,
+            | ErrorKind::InvalidByteStrLen
+            | ErrorKind::InvalidTextStrLen => None,
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => Some(source),
+            ErrorKind::InvalidUtf8Error(source) => Some(source),
         }
     }
 }

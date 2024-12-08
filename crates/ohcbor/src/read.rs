@@ -1,7 +1,7 @@
 //! [Read] trait and helpers to read bytes for the deserializer.
 
 use crate::error::{Error, ErrorKind, Result};
-use core::ops::Deref;
+use core::{ops::Deref, str};
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::vec::Vec;
@@ -72,6 +72,24 @@ pub trait Read<'a> {
     /// - malformatted input
     /// - end of file
     fn parse_byte_str<'b>(&'b mut self, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>>;
+
+    /// Returns the next slice of data for the given length.
+    ///
+    /// If all of the data is already read and available to borrowed against,
+    /// the returned result could be a reference to the original underlying
+    /// data.
+    ///
+    /// If the data is not already available and needs to be buffered, the data
+    /// could be added to the given buffer parameter and a borrowed slice from
+    /// the buffer could be returned.
+    ///
+    /// # Errors
+    ///
+    /// Errors include:
+    ///
+    /// - malformatted input
+    /// - end of file
+    fn parse_text_str<'b>(&'b mut self, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, str>>;
 }
 
 /// A wrapper to implement this crate's [Read] trait for [`std::io::Read`] trait implementations.
@@ -218,6 +236,82 @@ where
 
         Ok(Ref::Buffer(&buf[..]))
     }
+
+    fn parse_text_str<'b>(&'b mut self, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, str>> {
+        debug_assert!(buf.is_empty());
+
+        macro_rules! parse_next {
+            () => {
+                self.next().ok_or_else(|| {
+                    Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset())
+                })??
+            };
+        }
+
+        let init_byte = self
+            .next()
+            .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))??;
+        debug_assert_eq!(init_byte & 0b1110_0000, 0b0110_0000);
+
+        let arg_val = init_byte & 0b0001_1111;
+        let len: usize = match arg_val {
+            0..24 => usize::from(arg_val),
+            24 => {
+                let val = parse_next!();
+                usize::from(val)
+            }
+            25 => {
+                let val = u16::from_be_bytes([parse_next!(), parse_next!()]);
+                usize::from(val)
+            }
+            26 => {
+                let val = u32::from_be_bytes([
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                ]);
+                usize::try_from(val)
+                    .map_err(|_| Error::new(ErrorKind::InvalidTextStrLen, self.byte_offset()))?
+            }
+            27 => {
+                let val = u64::from_be_bytes([
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                ]);
+                usize::try_from(val)
+                    .map_err(|_| Error::new(ErrorKind::InvalidTextStrLen, self.byte_offset()))?
+            }
+            28..=30 => {
+                todo!()
+            }
+            31 => {
+                // Indefinite length
+                todo!()
+            }
+            _ => {
+                todo!()
+            }
+        };
+
+        buf.reserve(len);
+
+        for _ in 0..len {
+            buf.push(self.next().ok_or_else(|| {
+                Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset())
+            })??);
+        }
+
+        Ok(Ref::Buffer(str::from_utf8(&buf[..]).map_err(|e| {
+            Error::new(ErrorKind::InvalidUtf8Error(e), self.byte_offset())
+        })?))
+    }
 }
 
 /// A wrapper to implement this crate's [Read] trait for byte slices.
@@ -339,5 +433,84 @@ impl<'a> Read<'a> for SliceRead<'a> {
         }
 
         Ok(Ref::Source(&self.slice[start_idx..self.byte_offset]))
+    }
+
+    fn parse_text_str<'b>(&'b mut self, _buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, str>> {
+        macro_rules! parse_next {
+            () => {
+                self.next().ok_or_else(|| {
+                    Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset())
+                })??
+            };
+        }
+
+        let init_byte = self
+            .next()
+            .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))??;
+        debug_assert_eq!(init_byte & 0b1110_0000, 0b0110_0000);
+
+        let arg_val = init_byte & 0b0001_1111;
+        let len: usize = match arg_val {
+            0..24 => usize::from(arg_val),
+            24 => {
+                let val = parse_next!();
+                usize::from(val)
+            }
+            25 => {
+                let val = u16::from_be_bytes([parse_next!(), parse_next!()]);
+                usize::from(val)
+            }
+            26 => {
+                let val = u32::from_be_bytes([
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                ]);
+                usize::try_from(val)
+                    .map_err(|_| Error::new(ErrorKind::InvalidTextStrLen, self.byte_offset()))?
+            }
+            27 => {
+                let val = u64::from_be_bytes([
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                    parse_next!(),
+                ]);
+                usize::try_from(val)
+                    .map_err(|_| Error::new(ErrorKind::InvalidTextStrLen, self.byte_offset()))?
+            }
+            28..=30 => {
+                todo!()
+            }
+            31 => {
+                // Indefinite length
+                todo!()
+            }
+            _ => {
+                todo!()
+            }
+        };
+
+        let start_idx = self.byte_offset;
+        self.byte_offset += len;
+
+        let slice_len = self.slice.len();
+        if slice_len < self.byte_offset {
+            self.byte_offset = slice_len;
+            return Err(Error::new(
+                ErrorKind::EofWhileParsingValue,
+                self.byte_offset(),
+            ));
+        }
+
+        Ok(Ref::Source(
+            str::from_utf8(&self.slice[start_idx..self.byte_offset])
+                .map_err(|e| Error::new(ErrorKind::InvalidUtf8Error(e), self.byte_offset()))?,
+        ))
     }
 }
