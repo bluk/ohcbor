@@ -162,6 +162,8 @@ pub enum ErrorKind {
     Serialize(String),
     /// An unsupported type was used during serialization.
     UnsupportedType,
+    /// When deserializing a byte string, the length was not a valid number.
+    InvalidByteStrLen,
 }
 
 impl Display for ErrorKind {
@@ -173,6 +175,7 @@ impl Display for ErrorKind {
             ErrorKind::UnsupportedType => f.write_str("unsupported type"),
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => Display::fmt(source, f),
+            ErrorKind::InvalidByteStrLen => f.write_str("invalid byte string length"),
         }
     }
 }
@@ -186,6 +189,7 @@ impl fmt::Debug for ErrorKind {
             ErrorKind::UnsupportedType => f.write_str("unsupported type"),
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => fmt::Debug::fmt(source, f),
+            ErrorKind::InvalidByteStrLen => f.write_str("invalid byte string length"),
         }
     }
 }
@@ -197,7 +201,8 @@ impl error::Error for ErrorKind {
             | ErrorKind::EofWhileParsingValue
             | ErrorKind::TrailingData
             | ErrorKind::Serialize(_)
-            | ErrorKind::UnsupportedType => None,
+            | ErrorKind::UnsupportedType
+            | ErrorKind::InvalidByteStrLen => None,
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => Some(source),
         }
