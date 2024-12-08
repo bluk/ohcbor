@@ -1,11 +1,13 @@
 //! Deserializes CBOR data.
 
 use crate::error::{Error, ErrorKind, Result};
-use crate::read::{self, Read};
+use crate::read::{self, Read, Ref};
 use serde::de::{self};
 
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+use alloc::vec::Vec;
 #[cfg(feature = "std")]
-use std::io;
+use std::{io, vec::Vec};
 
 /// Deserializes an instance of `T` from the bytes of an [`io::Read`] type.
 ///
@@ -53,6 +55,8 @@ where
 /// A `CBOR` Deserializer for types which implement [Deserialize][serde::de::Deserialize].
 pub struct Deserializer<R> {
     read: R,
+    /// Temporary buffer used to reduce allocations made
+    buf: Vec<u8>,
 }
 
 impl<'a, R> Deserializer<R>
@@ -61,7 +65,10 @@ where
 {
     /// Constructs a Deserializer from a readable source.
     pub fn new(read: R) -> Self {
-        Deserializer { read }
+        Deserializer {
+            read,
+            buf: Vec::default(),
+        }
     }
 
     /// Should be called after a value from the source is deserialized to
@@ -297,11 +304,24 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
         self.deserialize_i128(visitor)
     }
 
-    fn deserialize_bytes<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        let init_byte = self.parse_peek()?;
+
+        match init_byte & 0b1110_0000 {
+            0b0100_0000 => {}
+            _ => {
+                // Error
+                todo!()
+            }
+        };
+        self.buf.clear();
+        match self.read.parse_byte_str(&mut self.buf)? {
+            Ref::Source(bytes) => visitor.visit_borrowed_bytes(bytes),
+            Ref::Buffer(bytes) => visitor.visit_bytes(bytes),
+        }
     }
 
     #[inline]
@@ -373,6 +393,11 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
 mod tests {
     use super::*;
     use hex_literal::hex;
+
+    #[cfg(all(feature = "alloc", not(feature = "std")))]
+    use alloc::vec;
+    #[cfg(feature = "std")]
+    use std::vec;
 
     macro_rules! assert_deser_u64_val {
         ($expected:literal, $input:expr) => {
@@ -631,6 +656,44 @@ mod tests {
     fn test_deserialize_neg_1000() -> Result<()> {
         let input = hex!("39 03 e7");
         assert_deser_i16_val!(-1000, input);
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_empty_byte_str() -> Result<()> {
+        let input = hex!("40");
+        assert_eq!(from_slice::<&[u8]>(&input)?, &[]);
+        assert_eq!(from_slice::<serde_bytes::ByteBuf>(&input)?, vec![]);
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_deserialize_reader_empty_byte_str() -> Result<()> {
+        let input = hex!("40");
+        assert_eq!(from_reader::<_, serde_bytes::ByteBuf>(&input[..])?, vec![]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_byte_str() -> Result<()> {
+        let input = hex!("44 01 02 03 04");
+        assert_eq!(from_slice::<&[u8]>(&input)?, &[0x01, 0x02, 0x03, 0x04]);
+        assert_eq!(
+            from_slice::<serde_bytes::ByteBuf>(&input)?,
+            vec![0x01, 0x02, 0x03, 0x04]
+        );
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_deserialize_reader_byte_str() -> Result<()> {
+        let input = hex!("44 01 02 03 04");
+        assert_eq!(
+            from_reader::<_, serde_bytes::ByteBuf>(&input[..])?,
+            vec![0x01, 0x02, 0x03, 0x04]
+        );
         Ok(())
     }
 }
