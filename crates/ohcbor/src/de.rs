@@ -162,7 +162,7 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
     serde::forward_to_deserialize_any! {
         bool f32 f64 unit unit_struct
 
-        char str string
+        char
 
         struct enum identifier ignored_any
     }
@@ -332,6 +332,35 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
         self.deserialize_bytes(visitor)
     }
 
+    fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        let init_byte = self.parse_peek()?;
+
+        match init_byte & 0b1110_0000 {
+            0b0110_0000 => {}
+            _ => {
+                // Error
+                todo!()
+            }
+        };
+        self.buf.clear();
+        match self.read.parse_text_str(&mut self.buf)? {
+            Ref::Source(bytes) => visitor.visit_borrowed_str(bytes),
+            Ref::Buffer(bytes) => visitor.visit_str(bytes),
+        }
+    }
+
+    #[inline]
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        // The implementation should be the same as str for this data model
+        self.deserialize_str(visitor)
+    }
+
     #[inline]
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
     where
@@ -395,9 +424,12 @@ mod tests {
     use hex_literal::hex;
 
     #[cfg(all(feature = "alloc", not(feature = "std")))]
-    use alloc::vec;
+    use alloc::{
+        string::{String, ToString},
+        vec,
+    };
     #[cfg(feature = "std")]
-    use std::vec;
+    use std::{string::String, vec};
 
     macro_rules! assert_deser_u64_val {
         ($expected:literal, $input:expr) => {
@@ -694,6 +726,126 @@ mod tests {
             from_reader::<_, serde_bytes::ByteBuf>(&input[..])?,
             vec![0x01, 0x02, 0x03, 0x04]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_empty_text_str() -> Result<()> {
+        let input = hex!("60");
+        assert_eq!(from_slice::<&str>(&input)?, "");
+        assert_eq!(from_slice::<String>(&input)?, String::new());
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_deserialize_reader_empty_text() -> Result<()> {
+        let input = hex!("60");
+        assert_eq!(from_reader::<_, String>(&input[..])?, String::new());
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_text_str_a() -> Result<()> {
+        let input = hex!("61 61");
+        assert_eq!(from_slice::<&str>(&input)?, "a");
+        assert_eq!(from_slice::<String>(&input)?, "a".to_string());
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_deserialize_reader_text_str_a() -> Result<()> {
+        let input = hex!("61 61");
+        assert_eq!(from_reader::<_, String>(&input[..])?, "a".to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_text_str_ietf() -> Result<()> {
+        let input = hex!("64 49 45 54 46");
+        assert_eq!(from_slice::<&str>(&input)?, "IETF");
+        assert_eq!(from_slice::<String>(&input)?, "IETF".to_string());
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_deserialize_reader_text_str_ietf() -> Result<()> {
+        let input = hex!("64 49 45 54 46");
+        assert_eq!(from_reader::<_, String>(&input[..])?, "IETF".to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_text_str_escaped() -> Result<()> {
+        let input = hex!("62 22 5c");
+        assert_eq!(from_slice::<&str>(&input)?, "\"\\");
+        assert_eq!(from_slice::<String>(&input)?, "\"\\".to_string());
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_deserialize_reader_text_str_escaped() -> Result<()> {
+        let input = hex!("62 22 5c");
+        assert_eq!(from_reader::<_, String>(&input[..])?, "\"\\".to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_text_str_unicode() -> Result<()> {
+        let input = hex!("62 c3 bc");
+        assert_eq!(from_slice::<&str>(&input)?, "\u{00fc}");
+        assert_eq!(from_slice::<String>(&input)?, "\u{00fc}".to_string());
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_deserialize_reader_text_str_unicode() -> Result<()> {
+        let input = hex!("62 c3 bc");
+        assert_eq!(
+            from_reader::<_, String>(&input[..])?,
+            "\u{00fc}".to_string()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_text_str_unicode_2() -> Result<()> {
+        let input = hex!("63 e6 b0 b4");
+        assert_eq!(from_slice::<&str>(&input)?, "\u{6c34}");
+        assert_eq!(from_slice::<String>(&input)?, "\u{6c34}".to_string());
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_deserialize_reader_text_str_unicode_2() -> Result<()> {
+        let input = hex!("63 e6 b0 b4");
+        assert_eq!(
+            from_reader::<_, String>(&input[..])?,
+            "\u{6c34}".to_string()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_text_str_unicode_3() -> Result<()> {
+        let input = hex!("64 f0 90 85 91");
+        let expected = String::from_utf16(&[0xD800, 0xDD51]).unwrap();
+        assert_eq!(from_slice::<&str>(&input)?, expected);
+        assert_eq!(from_slice::<String>(&input)?, expected);
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_deserialize_reader_text_str_unicode_3() -> Result<()> {
+        let input = hex!("64 f0 90 85 91");
+        let expected = String::from_utf16(&[0xD800, 0xDD51]).unwrap();
+        assert_eq!(from_reader::<_, String>(&input[..])?, expected);
         Ok(())
     }
 }
