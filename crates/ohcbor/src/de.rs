@@ -395,11 +395,74 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
         visitor.visit_newtype_struct(self)
     }
 
-    fn deserialize_seq<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        let init_byte = self.parse_peek()?;
+
+        match init_byte & 0b1110_0000 {
+            0b1000_0000 => {}
+            _ => {
+                // Error
+                todo!()
+            }
+        };
+
+        self.parse_next()?;
+
+        let arg_val = init_byte & 0b0001_1111;
+        let len: Option<u64> = match arg_val {
+            0..24 => Some(u64::from(arg_val)),
+            24 => {
+                let val = self.parse_next()?;
+                Some(u64::from(val))
+            }
+            25 => {
+                let val = u16::from_be_bytes([self.parse_next()?, self.parse_next()?]);
+                Some(u64::from(val))
+            }
+            26 => {
+                let val = u32::from_be_bytes([
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                ]);
+                Some(u64::from(val))
+            }
+            27 => {
+                let val = u64::from_be_bytes([
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                ]);
+                Some(val)
+            }
+            28..=30 => {
+                todo!()
+            }
+            31 => {
+                // Indefinite length
+                todo!()
+            }
+            _ => {
+                todo!()
+            }
+        };
+
+        let len = len.map(|len| usize::try_from(len).unwrap());
+
+        visitor.visit_seq(SeqAccess {
+            de: self,
+            len,
+            count: 0,
+        })
     }
 
     #[inline]
@@ -433,6 +496,41 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
     #[inline]
     fn is_human_readable(&self) -> bool {
         false
+    }
+}
+
+struct SeqAccess<'a, R> {
+    de: &'a mut Deserializer<R>,
+    /// Expected number of items. If `None`, the list has an indefinite length
+    len: Option<usize>,
+    /// Number of elements already deserialized
+    count: usize,
+}
+
+impl<'de, 'a, R: Read<'de> + 'a> de::SeqAccess<'de> for SeqAccess<'a, R> {
+    type Error = Error;
+
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
+    where
+        T: de::DeserializeSeed<'de>,
+    {
+        if let Some(len) = self.len {
+            if len == self.count {
+                return Ok(None);
+            }
+            self.count += 1;
+        } else {
+            // Indefinite length
+            todo!()
+        }
+
+        Ok(Some(seed.deserialize(&mut *self.de)?))
+    }
+
+    /// Returns the number of elements remaining in the sequence, if known.
+    #[inline]
+    fn size_hint(&self) -> Option<usize> {
+        self.len
     }
 }
 
@@ -885,6 +983,41 @@ mod tests {
     fn test_deserialize_null() -> Result<()> {
         let input = hex!("f6");
         assert_eq!(from_slice::<Option<i8>>(&input)?, None);
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_empty_arr() -> Result<()> {
+        let input = hex!("80");
+        assert_eq!(from_slice::<Vec<u8>>(&input)?, vec![]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_arr() -> Result<()> {
+        let input = hex!("83 01 02 03");
+        assert_eq!(from_slice::<Vec<u8>>(&input)?, vec![1, 2, 3]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_nested_arr() -> Result<()> {
+        let input = hex!("83 01 82 02 03 82 04 05");
+        let expected: (u8, Vec<u8>, Vec<u8>) = (1, vec![2, 3], vec![4, 5]);
+        assert_eq!(expected, from_slice(&input)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_arr_len_greater_than_24() -> Result<()> {
+        let input = hex!("98 19 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 18 18 19");
+        assert_eq!(
+            vec![
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                24, 25
+            ],
+            from_slice::<Vec<u8>>(&input)?
+        );
         Ok(())
     }
 }
