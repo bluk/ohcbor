@@ -160,11 +160,24 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
     }
 
     serde::forward_to_deserialize_any! {
-        bool f32 f64 unit unit_struct
+        f32 f64 unit unit_struct
 
         char
 
         struct enum identifier ignored_any
+    }
+
+    fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        let init_byte = self.parse_next()?;
+
+        match init_byte {
+            0b1111_0100 => visitor.visit_bool(false),
+            0b1111_0101 => visitor.visit_bool(true),
+            _ => todo!(),
+        }
     }
 
     forward_deserialize_signed_integer!(deserialize_i8);
@@ -366,7 +379,12 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
     where
         V: de::Visitor<'de>,
     {
-        visitor.visit_some(self)
+        let init_byte = self.parse_next()?;
+
+        match init_byte {
+            0b1111_0110 => visitor.visit_none(),
+            _ => visitor.visit_some(self),
+        }
     }
 
     #[inline]
@@ -846,6 +864,27 @@ mod tests {
         let input = hex!("64 f0 90 85 91");
         let expected = String::from_utf16(&[0xD800, 0xDD51]).unwrap();
         assert_eq!(from_reader::<_, String>(&input[..])?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_bool_false() -> Result<()> {
+        let input = hex!("f4");
+        assert!(!from_slice::<bool>(&input)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_bool_true() -> Result<()> {
+        let input = hex!("f5");
+        assert!(from_slice::<bool>(&input)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_null() -> Result<()> {
+        let input = hex!("f6");
+        assert_eq!(from_slice::<Option<i8>>(&input)?, None);
         Ok(())
     }
 }
