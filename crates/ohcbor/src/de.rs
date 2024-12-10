@@ -486,11 +486,74 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
         self.deserialize_seq(visitor)
     }
 
-    fn deserialize_map<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_map<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        let init_byte = self.parse_peek()?;
+
+        match init_byte & 0b1110_0000 {
+            0b1010_0000 => {}
+            _ => {
+                // Error
+                todo!()
+            }
+        };
+
+        self.parse_next()?;
+
+        let arg_val = init_byte & 0b0001_1111;
+        let len: Option<u64> = match arg_val {
+            0..24 => Some(u64::from(arg_val)),
+            24 => {
+                let val = self.parse_next()?;
+                Some(u64::from(val))
+            }
+            25 => {
+                let val = u16::from_be_bytes([self.parse_next()?, self.parse_next()?]);
+                Some(u64::from(val))
+            }
+            26 => {
+                let val = u32::from_be_bytes([
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                ]);
+                Some(u64::from(val))
+            }
+            27 => {
+                let val = u64::from_be_bytes([
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                    self.parse_next()?,
+                ]);
+                Some(val)
+            }
+            28..=30 => {
+                todo!()
+            }
+            31 => {
+                // Indefinite length
+                todo!()
+            }
+            _ => {
+                todo!()
+            }
+        };
+
+        let len = len.map(|len| usize::try_from(len).unwrap());
+
+        visitor.visit_map(MapAccess {
+            de: self,
+            len,
+            count: 0,
+        })
     }
 
     #[inline]
@@ -534,6 +597,106 @@ impl<'de, 'a, R: Read<'de> + 'a> de::SeqAccess<'de> for SeqAccess<'a, R> {
     }
 }
 
+struct MapAccess<'a, R> {
+    de: &'a mut Deserializer<R>,
+    len: Option<usize>,
+    count: usize,
+}
+
+impl<'de, 'a, R: Read<'de> + 'a> de::MapAccess<'de> for MapAccess<'a, R> {
+    type Error = Error;
+
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
+    where
+        K: de::DeserializeSeed<'de>,
+    {
+        if let Some(len) = self.len {
+            if len == self.count {
+                return Ok(None);
+            }
+            self.count += 1;
+
+            seed.deserialize(MapKey { de: &mut *self.de }).map(Some)
+        } else {
+            // Indefinite length
+            todo!()
+        }
+    }
+
+    #[inline]
+    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>
+    where
+        V: de::DeserializeSeed<'de>,
+    {
+        seed.deserialize(&mut *self.de)
+    }
+
+    fn size_hint(&self) -> Option<usize> {
+        self.len
+    }
+}
+
+struct MapKey<'a, R> {
+    de: &'a mut Deserializer<R>,
+}
+
+impl<'de, R> de::Deserializer<'de> for MapKey<'_, R>
+where
+    R: Read<'de>,
+{
+    type Error = Error;
+
+    #[inline]
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        self.de.deserialize_any(visitor)
+    }
+
+    #[inline]
+    fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        visitor.visit_some(self)
+    }
+
+    #[inline]
+    fn deserialize_newtype_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        visitor.visit_newtype_struct(self)
+    }
+
+    fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        self.de.deserialize_str(visitor)
+    }
+
+    fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        self.de.deserialize_string(visitor)
+    }
+
+    fn deserialize_u8<V>(self, visitor: V) -> Result<V::Value>
+    where
+        V: de::Visitor<'de>,
+    {
+        self.de.deserialize_u8(visitor)
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 u16 u32 u64 f32 f64 unit unit_struct seq tuple tuple_struct map
+        char bytes byte_buf enum struct identifier ignored_any
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -541,11 +704,12 @@ mod tests {
 
     #[cfg(all(feature = "alloc", not(feature = "std")))]
     use alloc::{
+        collections::BTreeMap,
         string::{String, ToString},
         vec,
     };
     #[cfg(feature = "std")]
-    use std::{string::String, vec};
+    use std::{collections::BTreeMap, string::String, vec};
 
     macro_rules! assert_deser_u64_val {
         ($expected:literal, $input:expr) => {
@@ -1018,6 +1182,24 @@ mod tests {
             ],
             from_slice::<Vec<u8>>(&input)?
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_empty_map() -> Result<()> {
+        let input = hex!("a0");
+        assert_eq!(
+            from_slice::<BTreeMap<String, String>>(&input)?,
+            BTreeMap::default()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_map() -> Result<()> {
+        let input = hex!("a2 01 02 03 04");
+        let expected = BTreeMap::from([(1, 2), (3, 4)]);
+        assert_eq!(from_slice::<BTreeMap<u8, u8>>(&input)?, expected);
         Ok(())
     }
 }
