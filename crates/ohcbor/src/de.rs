@@ -443,10 +443,13 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
     where
         V: de::Visitor<'de>,
     {
-        let init_byte = self.parse_next()?;
+        let init_byte = self.parse_peek()?;
 
         match init_byte {
-            IB_NULL => visitor.visit_none(),
+            IB_NULL => {
+                self.parse_next()?;
+                visitor.visit_none()
+            }
             _ => visitor.visit_some(self),
         }
     }
@@ -1121,6 +1124,13 @@ mod tests {
     fn test_deserialize_null() -> Result<()> {
         let input = hex!("f6");
         assert_eq!(from_slice::<Option<i8>>(&input)?, None);
+        Ok(())
+    }
+
+    #[test]
+    fn test_deserialize_option() -> Result<()> {
+        let input = hex!("f5");
+        assert_eq!(from_slice::<Option<bool>>(&input)?, Some(true));
         Ok(())
     }
 
