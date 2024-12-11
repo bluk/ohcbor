@@ -55,6 +55,18 @@ pub trait Read<'a> {
     /// Returns the position in the stream of bytes.
     fn byte_offset(&self) -> usize;
 
+    /// Parses the argument as a length.
+    ///
+    /// Useful for byte strings, text strings, arrays, and maps.
+    ///
+    /// # Errors
+    ///
+    /// Errors include:
+    ///
+    /// - malformatted input
+    /// - end of file
+    fn parse_len(&mut self, init_byte: u8) -> Result<Option<usize>>;
+
     /// Returns the next slice of data for the given length.
     ///
     /// If all of the data is already read and available to borrowed against,
@@ -163,9 +175,7 @@ where
         self.byte_offset
     }
 
-    fn parse_byte_str<'b>(&'b mut self, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>> {
-        debug_assert!(buf.is_empty());
-
+    fn parse_len(&mut self, init_byte: u8) -> Result<Option<usize>> {
         macro_rules! parse_next {
             () => {
                 self.next().ok_or_else(|| {
@@ -173,11 +183,6 @@ where
                 })??
             };
         }
-
-        let init_byte = self
-            .next()
-            .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))??;
-        debug_assert_eq!(init_byte & 0b1110_0000, 0b0100_0000);
 
         let arg_val = init_byte & 0b0001_1111;
         let len: usize = match arg_val {
@@ -198,7 +203,7 @@ where
                     parse_next!(),
                 ]);
                 usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidByteStrLen, self.byte_offset()))?
+                    .map_err(|_| Error::new(ErrorKind::InvalidLen, self.byte_offset()))?
             }
             27 => {
                 let val = u64::from_be_bytes([
@@ -212,19 +217,32 @@ where
                     parse_next!(),
                 ]);
                 usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidByteStrLen, self.byte_offset()))?
+                    .map_err(|_| Error::new(ErrorKind::InvalidLen, self.byte_offset()))?
             }
             28..=30 => {
-                todo!()
+                return Err(Error::new(ErrorKind::NotWellFormed, self.byte_offset() - 1));
             }
             31 => {
                 // Indefinite length
-                todo!()
+                return Ok(None);
             }
             _ => {
-                todo!()
+                unreachable!()
             }
         };
+
+        Ok(Some(len))
+    }
+
+    fn parse_byte_str<'b>(&'b mut self, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>> {
+        debug_assert!(buf.is_empty());
+
+        let init_byte = self
+            .next()
+            .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))??;
+        debug_assert_eq!(init_byte & 0b1110_0000, 0b0100_0000);
+
+        let len = self.parse_len(init_byte)?.unwrap();
 
         buf.reserve(len);
 
@@ -240,65 +258,12 @@ where
     fn parse_text_str<'b>(&'b mut self, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, str>> {
         debug_assert!(buf.is_empty());
 
-        macro_rules! parse_next {
-            () => {
-                self.next().ok_or_else(|| {
-                    Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset())
-                })??
-            };
-        }
-
         let init_byte = self
             .next()
             .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))??;
         debug_assert_eq!(init_byte & 0b1110_0000, 0b0110_0000);
 
-        let arg_val = init_byte & 0b0001_1111;
-        let len: usize = match arg_val {
-            0..24 => usize::from(arg_val),
-            24 => {
-                let val = parse_next!();
-                usize::from(val)
-            }
-            25 => {
-                let val = u16::from_be_bytes([parse_next!(), parse_next!()]);
-                usize::from(val)
-            }
-            26 => {
-                let val = u32::from_be_bytes([
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                ]);
-                usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidTextStrLen, self.byte_offset()))?
-            }
-            27 => {
-                let val = u64::from_be_bytes([
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                ]);
-                usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidTextStrLen, self.byte_offset()))?
-            }
-            28..=30 => {
-                todo!()
-            }
-            31 => {
-                // Indefinite length
-                todo!()
-            }
-            _ => {
-                todo!()
-            }
-        };
+        let len = self.parse_len(init_byte)?.unwrap();
 
         buf.reserve(len);
 
@@ -359,66 +324,98 @@ impl<'a> Read<'a> for SliceRead<'a> {
         self.byte_offset
     }
 
-    fn parse_byte_str<'b>(&'b mut self, _buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>> {
-        macro_rules! parse_next {
-            () => {
-                self.next().ok_or_else(|| {
+    fn parse_len(&mut self, init_byte: u8) -> Result<Option<usize>> {
+        let arg_val = init_byte & 0b0001_1111;
+        let len: usize = match arg_val {
+            0..24 => usize::from(arg_val),
+            24 => {
+                let val = self.next().ok_or_else(|| {
                     Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset())
-                })??
-            };
-        }
+                })??;
+                usize::from(val)
+            }
+            25 => {
+                if self.byte_offset + 1 < self.slice.len() {
+                    let val = u16::from_be_bytes([
+                        self.slice[self.byte_offset],
+                        self.slice[self.byte_offset + 1],
+                    ]);
+                    self.byte_offset += 2;
+                    usize::from(val)
+                } else {
+                    self.byte_offset = self.slice.len();
+                    return Err(Error::new(
+                        ErrorKind::EofWhileParsingValue,
+                        self.byte_offset(),
+                    ));
+                }
+            }
+            26 => {
+                if self.byte_offset + 3 < self.slice.len() {
+                    let val = u32::from_be_bytes([
+                        self.slice[self.byte_offset],
+                        self.slice[self.byte_offset + 1],
+                        self.slice[self.byte_offset + 2],
+                        self.slice[self.byte_offset + 3],
+                    ]);
+                    self.byte_offset += 4;
 
+                    usize::try_from(val)
+                        .map_err(|_| Error::new(ErrorKind::InvalidLen, self.byte_offset()))?
+                } else {
+                    self.byte_offset = self.slice.len();
+                    return Err(Error::new(
+                        ErrorKind::EofWhileParsingValue,
+                        self.byte_offset(),
+                    ));
+                }
+            }
+            27 => {
+                if self.byte_offset + 7 < self.slice.len() {
+                    let val = u64::from_be_bytes([
+                        self.slice[self.byte_offset],
+                        self.slice[self.byte_offset + 1],
+                        self.slice[self.byte_offset + 2],
+                        self.slice[self.byte_offset + 3],
+                        self.slice[self.byte_offset + 4],
+                        self.slice[self.byte_offset + 5],
+                        self.slice[self.byte_offset + 6],
+                        self.slice[self.byte_offset + 7],
+                    ]);
+                    self.byte_offset += 8;
+
+                    usize::try_from(val)
+                        .map_err(|_| Error::new(ErrorKind::InvalidLen, self.byte_offset()))?
+                } else {
+                    self.byte_offset = self.slice.len();
+                    return Err(Error::new(
+                        ErrorKind::EofWhileParsingValue,
+                        self.byte_offset(),
+                    ));
+                }
+            }
+            28..=30 => {
+                return Err(Error::new(ErrorKind::NotWellFormed, self.byte_offset() - 1));
+            }
+            31 => {
+                // Indefinite length
+                return Ok(None);
+            }
+            _ => {
+                unreachable!()
+            }
+        };
+
+        Ok(Some(len))
+    }
+
+    fn parse_byte_str<'b>(&'b mut self, _buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>> {
         let init_byte = self
             .next()
             .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))??;
         debug_assert_eq!(init_byte & 0b1110_0000, 0b0100_0000);
 
-        let arg_val = init_byte & 0b0001_1111;
-        let len: usize = match arg_val {
-            0..24 => usize::from(arg_val),
-            24 => {
-                let val = parse_next!();
-                usize::from(val)
-            }
-            25 => {
-                let val = u16::from_be_bytes([parse_next!(), parse_next!()]);
-                usize::from(val)
-            }
-            26 => {
-                let val = u32::from_be_bytes([
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                ]);
-                usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidByteStrLen, self.byte_offset()))?
-            }
-            27 => {
-                let val = u64::from_be_bytes([
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                ]);
-                usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidByteStrLen, self.byte_offset()))?
-            }
-            28..=30 => {
-                todo!()
-            }
-            31 => {
-                // Indefinite length
-                todo!()
-            }
-            _ => {
-                todo!()
-            }
-        };
+        let len = self.parse_len(init_byte)?.unwrap();
 
         let start_idx = self.byte_offset;
         self.byte_offset += len;
@@ -436,65 +433,12 @@ impl<'a> Read<'a> for SliceRead<'a> {
     }
 
     fn parse_text_str<'b>(&'b mut self, _buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, str>> {
-        macro_rules! parse_next {
-            () => {
-                self.next().ok_or_else(|| {
-                    Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset())
-                })??
-            };
-        }
-
         let init_byte = self
             .next()
             .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))??;
         debug_assert_eq!(init_byte & 0b1110_0000, 0b0110_0000);
 
-        let arg_val = init_byte & 0b0001_1111;
-        let len: usize = match arg_val {
-            0..24 => usize::from(arg_val),
-            24 => {
-                let val = parse_next!();
-                usize::from(val)
-            }
-            25 => {
-                let val = u16::from_be_bytes([parse_next!(), parse_next!()]);
-                usize::from(val)
-            }
-            26 => {
-                let val = u32::from_be_bytes([
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                ]);
-                usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidTextStrLen, self.byte_offset()))?
-            }
-            27 => {
-                let val = u64::from_be_bytes([
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                    parse_next!(),
-                ]);
-                usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidTextStrLen, self.byte_offset()))?
-            }
-            28..=30 => {
-                todo!()
-            }
-            31 => {
-                // Indefinite length
-                todo!()
-            }
-            _ => {
-                todo!()
-            }
-        };
+        let len = self.parse_len(init_byte)?.unwrap();
 
         let start_idx = self.byte_offset;
         self.byte_offset += len;

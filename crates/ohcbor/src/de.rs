@@ -411,52 +411,7 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
 
         self.parse_next()?;
 
-        let arg_val = init_byte & 0b0001_1111;
-        let len: Option<u64> = match arg_val {
-            0..24 => Some(u64::from(arg_val)),
-            24 => {
-                let val = self.parse_next()?;
-                Some(u64::from(val))
-            }
-            25 => {
-                let val = u16::from_be_bytes([self.parse_next()?, self.parse_next()?]);
-                Some(u64::from(val))
-            }
-            26 => {
-                let val = u32::from_be_bytes([
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                ]);
-                Some(u64::from(val))
-            }
-            27 => {
-                let val = u64::from_be_bytes([
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                ]);
-                Some(val)
-            }
-            28..=30 => {
-                todo!()
-            }
-            31 => {
-                // Indefinite length
-                todo!()
-            }
-            _ => {
-                todo!()
-            }
-        };
-
-        let len = len.map(|len| usize::try_from(len).unwrap());
+        let len = self.read.parse_len(init_byte)?;
 
         visitor.visit_seq(SeqAccess {
             de: self,
@@ -502,52 +457,7 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
 
         self.parse_next()?;
 
-        let arg_val = init_byte & 0b0001_1111;
-        let len: Option<u64> = match arg_val {
-            0..24 => Some(u64::from(arg_val)),
-            24 => {
-                let val = self.parse_next()?;
-                Some(u64::from(val))
-            }
-            25 => {
-                let val = u16::from_be_bytes([self.parse_next()?, self.parse_next()?]);
-                Some(u64::from(val))
-            }
-            26 => {
-                let val = u32::from_be_bytes([
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                ]);
-                Some(u64::from(val))
-            }
-            27 => {
-                let val = u64::from_be_bytes([
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                    self.parse_next()?,
-                ]);
-                Some(val)
-            }
-            28..=30 => {
-                todo!()
-            }
-            31 => {
-                // Indefinite length
-                todo!()
-            }
-            _ => {
-                todo!()
-            }
-        };
-
-        let len = len.map(|len| usize::try_from(len).unwrap());
+        let len = self.read.parse_len(init_byte)?;
 
         visitor.visit_map(MapAccess {
             de: self,
