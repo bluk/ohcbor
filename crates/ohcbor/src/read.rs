@@ -1,7 +1,7 @@
 //! [Read] trait and helpers to read bytes for the deserializer.
 
 use crate::error::{Error, ErrorKind, Result};
-use core::{ops::Deref, str};
+use core::ops::Deref;
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::vec::Vec;
@@ -55,6 +55,25 @@ pub trait Read<'a> {
     /// Returns the position in the stream of bytes.
     fn byte_offset(&self) -> usize;
 
+    /// Reads an exact number of bytes by either putting them into the buffer or
+    /// by returning a borrowed byte slice.
+    ///
+    /// If all of the data is already read and available to borrowed against,
+    /// the returned result could be a reference to the original underlying
+    /// data.
+    ///
+    /// If the data is not already available and needs to be buffered, the data
+    /// could be added to the given buffer parameter and a borrowed slice from
+    /// the buffer could be returned.
+    ///
+    /// # Errors
+    ///
+    /// Errors include:
+    ///
+    /// - malformatted input
+    /// - end of file
+    fn read_exact<'b>(&'b mut self, len: usize, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>>;
+
     /// Parses the argument as a length.
     ///
     /// Useful for byte strings, text strings, arrays, and maps.
@@ -66,42 +85,6 @@ pub trait Read<'a> {
     /// - malformatted input
     /// - end of file
     fn parse_len(&mut self, init_byte: u8) -> Result<Option<usize>>;
-
-    /// Returns the next slice of data for the given length.
-    ///
-    /// If all of the data is already read and available to borrowed against,
-    /// the returned result could be a reference to the original underlying
-    /// data.
-    ///
-    /// If the data is not already available and needs to be buffered, the data
-    /// could be added to the given buffer parameter and a borrowed slice from
-    /// the buffer could be returned.
-    ///
-    /// # Errors
-    ///
-    /// Errors include:
-    ///
-    /// - malformatted input
-    /// - end of file
-    fn parse_byte_str<'b>(&'b mut self, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>>;
-
-    /// Returns the next slice of data for the given length.
-    ///
-    /// If all of the data is already read and available to borrowed against,
-    /// the returned result could be a reference to the original underlying
-    /// data.
-    ///
-    /// If the data is not already available and needs to be buffered, the data
-    /// could be added to the given buffer parameter and a borrowed slice from
-    /// the buffer could be returned.
-    ///
-    /// # Errors
-    ///
-    /// Errors include:
-    ///
-    /// - malformatted input
-    /// - end of file
-    fn parse_text_str<'b>(&'b mut self, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, str>>;
 }
 
 /// A wrapper to implement this crate's [Read] trait for [`std::io::Read`] trait implementations.
@@ -175,6 +158,20 @@ where
         self.byte_offset
     }
 
+    fn read_exact<'b>(&'b mut self, len: usize, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>> {
+        debug_assert!(buf.is_empty());
+
+        buf.reserve(len);
+
+        for _ in 0..len {
+            buf.push(self.next().ok_or_else(|| {
+                Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset())
+            })??);
+        }
+
+        Ok(Ref::Buffer(&buf[..]))
+    }
+
     fn parse_len(&mut self, init_byte: u8) -> Result<Option<usize>> {
         macro_rules! parse_next {
             () => {
@@ -233,50 +230,6 @@ where
 
         Ok(Some(len))
     }
-
-    fn parse_byte_str<'b>(&'b mut self, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>> {
-        debug_assert!(buf.is_empty());
-
-        let init_byte = self
-            .next()
-            .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))??;
-        debug_assert_eq!(init_byte & 0b1110_0000, 0b0100_0000);
-
-        let len = self.parse_len(init_byte)?.unwrap();
-
-        buf.reserve(len);
-
-        for _ in 0..len {
-            buf.push(self.next().ok_or_else(|| {
-                Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset())
-            })??);
-        }
-
-        Ok(Ref::Buffer(&buf[..]))
-    }
-
-    fn parse_text_str<'b>(&'b mut self, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, str>> {
-        debug_assert!(buf.is_empty());
-
-        let init_byte = self
-            .next()
-            .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))??;
-        debug_assert_eq!(init_byte & 0b1110_0000, 0b0110_0000);
-
-        let len = self.parse_len(init_byte)?.unwrap();
-
-        buf.reserve(len);
-
-        for _ in 0..len {
-            buf.push(self.next().ok_or_else(|| {
-                Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset())
-            })??);
-        }
-
-        Ok(Ref::Buffer(str::from_utf8(&buf[..]).map_err(|e| {
-            Error::new(ErrorKind::InvalidUtf8Error(e), self.byte_offset())
-        })?))
-    }
 }
 
 /// A wrapper to implement this crate's [Read] trait for byte slices.
@@ -322,6 +275,26 @@ impl<'a> Read<'a> for SliceRead<'a> {
     #[inline]
     fn byte_offset(&self) -> usize {
         self.byte_offset
+    }
+
+    fn read_exact<'b>(
+        &'b mut self,
+        len: usize,
+        _buf: &'b mut Vec<u8>,
+    ) -> Result<Ref<'a, 'b, [u8]>> {
+        let start_idx = self.byte_offset;
+        self.byte_offset += len;
+
+        let slice_len = self.slice.len();
+        if slice_len < self.byte_offset {
+            self.byte_offset = slice_len;
+            return Err(Error::new(
+                ErrorKind::EofWhileParsingValue,
+                self.byte_offset(),
+            ));
+        }
+
+        Ok(Ref::Source(&self.slice[start_idx..self.byte_offset]))
     }
 
     fn parse_len(&mut self, init_byte: u8) -> Result<Option<usize>> {
@@ -407,54 +380,5 @@ impl<'a> Read<'a> for SliceRead<'a> {
         };
 
         Ok(Some(len))
-    }
-
-    fn parse_byte_str<'b>(&'b mut self, _buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>> {
-        let init_byte = self
-            .next()
-            .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))??;
-        debug_assert_eq!(init_byte & 0b1110_0000, 0b0100_0000);
-
-        let len = self.parse_len(init_byte)?.unwrap();
-
-        let start_idx = self.byte_offset;
-        self.byte_offset += len;
-
-        let slice_len = self.slice.len();
-        if slice_len < self.byte_offset {
-            self.byte_offset = slice_len;
-            return Err(Error::new(
-                ErrorKind::EofWhileParsingValue,
-                self.byte_offset(),
-            ));
-        }
-
-        Ok(Ref::Source(&self.slice[start_idx..self.byte_offset]))
-    }
-
-    fn parse_text_str<'b>(&'b mut self, _buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, str>> {
-        let init_byte = self
-            .next()
-            .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))??;
-        debug_assert_eq!(init_byte & 0b1110_0000, 0b0110_0000);
-
-        let len = self.parse_len(init_byte)?.unwrap();
-
-        let start_idx = self.byte_offset;
-        self.byte_offset += len;
-
-        let slice_len = self.slice.len();
-        if slice_len < self.byte_offset {
-            self.byte_offset = slice_len;
-            return Err(Error::new(
-                ErrorKind::EofWhileParsingValue,
-                self.byte_offset(),
-            ));
-        }
-
-        Ok(Ref::Source(
-            str::from_utf8(&self.slice[start_idx..self.byte_offset])
-                .map_err(|e| Error::new(ErrorKind::InvalidUtf8Error(e), self.byte_offset()))?,
-        ))
     }
 }
