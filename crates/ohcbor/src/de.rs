@@ -4,6 +4,8 @@ use crate::error::{Error, ErrorKind, Result};
 use crate::read::{self, Read, Ref};
 use serde::de::{self};
 
+use core::str;
+
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::vec::Vec;
 #[cfg(feature = "std")]
@@ -330,8 +332,12 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
                 todo!()
             }
         };
+        self.parse_next()?;
+
+        let len = self.read.parse_len(init_byte)?.unwrap();
+
         self.buf.clear();
-        match self.read.parse_byte_str(&mut self.buf)? {
+        match self.read.read_exact(len, &mut self.buf)? {
             Ref::Source(bytes) => visitor.visit_borrowed_bytes(bytes),
             Ref::Buffer(bytes) => visitor.visit_bytes(bytes),
         }
@@ -358,10 +364,26 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
                 todo!()
             }
         };
+        self.parse_next()?;
+
+        let len = self.read.parse_len(init_byte)?.unwrap();
+
         self.buf.clear();
-        match self.read.parse_text_str(&mut self.buf)? {
-            Ref::Source(bytes) => visitor.visit_borrowed_str(bytes),
-            Ref::Buffer(bytes) => visitor.visit_str(bytes),
+        match self.read.read_exact(len, &mut self.buf)? {
+            Ref::Source(bytes) => match str::from_utf8(bytes) {
+                Ok(s) => visitor.visit_borrowed_str(s),
+                Err(e) => Err(Error::new(
+                    ErrorKind::InvalidUtf8Error(e),
+                    self.read.byte_offset(),
+                )),
+            },
+            Ref::Buffer(bytes) => match str::from_utf8(bytes) {
+                Ok(s) => visitor.visit_str(s),
+                Err(e) => Err(Error::new(
+                    ErrorKind::InvalidUtf8Error(e),
+                    self.read.byte_offset(),
+                )),
+            },
         }
     }
 
