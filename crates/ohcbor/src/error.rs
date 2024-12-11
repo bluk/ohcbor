@@ -163,10 +163,12 @@ pub enum ErrorKind {
     Serialize(String),
     /// An unsupported type was used during serialization.
     UnsupportedType,
-    /// When deserializing a byte string, the length was not a valid number.
-    InvalidByteStrLen,
-    /// When deserializing a text string, the length was not a valid number.
-    InvalidTextStrLen,
+    /// Data is not well formed.
+    NotWellFormed,
+    /// Length argument is not a valid number
+    ///
+    /// The length could be greater than `usize::MAX`.
+    InvalidLen,
     /// Invalid UTF-8
     InvalidUtf8Error(Utf8Error),
 }
@@ -180,8 +182,8 @@ impl Display for ErrorKind {
             ErrorKind::UnsupportedType => f.write_str("unsupported type"),
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => Display::fmt(source, f),
-            ErrorKind::InvalidByteStrLen => f.write_str("invalid byte string length"),
-            ErrorKind::InvalidTextStrLen => f.write_str("invalid text string length"),
+            ErrorKind::NotWellFormed => f.write_str("data is not well formed"),
+            ErrorKind::InvalidLen => f.write_str("invalid length argument"),
             ErrorKind::InvalidUtf8Error(source) => Display::fmt(source, f),
         }
     }
@@ -196,8 +198,8 @@ impl fmt::Debug for ErrorKind {
             ErrorKind::UnsupportedType => f.write_str("unsupported type"),
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => fmt::Debug::fmt(source, f),
-            ErrorKind::InvalidByteStrLen => f.write_str("invalid byte string length"),
-            ErrorKind::InvalidTextStrLen => f.write_str("invalid text string length"),
+            ErrorKind::NotWellFormed => f.write_str("data is not well formed"),
+            ErrorKind::InvalidLen => f.write_str("invalid length argument"),
             ErrorKind::InvalidUtf8Error(source) => Display::fmt(source, f),
         }
     }
@@ -211,8 +213,8 @@ impl error::Error for ErrorKind {
             | ErrorKind::TrailingData
             | ErrorKind::Serialize(_)
             | ErrorKind::UnsupportedType
-            | ErrorKind::InvalidByteStrLen
-            | ErrorKind::InvalidTextStrLen => None,
+            | ErrorKind::NotWellFormed
+            | ErrorKind::InvalidLen => None,
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => Some(source),
             ErrorKind::InvalidUtf8Error(source) => Some(source),
