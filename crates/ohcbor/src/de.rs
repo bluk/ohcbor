@@ -2,7 +2,7 @@
 
 use crate::error::{Error, ErrorKind, Result};
 use crate::read::{self, Read, Ref};
-use serde::de::{self};
+use serde::de::{self, Expected, Unexpected};
 
 use core::str;
 
@@ -10,6 +10,17 @@ use core::str;
 use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::{io, vec::Vec};
+
+const IB_UINT_MIN: u8 = 0b0000_0000;
+const IB_SINT_MIN: u8 = 0b0010_0000;
+const IB_BYTE_STR_MIN: u8 = 0b0100_0000;
+const IB_TEXT_STR_MIN: u8 = 0b0110_0000;
+const IB_ARRAY_MIN: u8 = 0b1000_0000;
+const IB_MAP_MIN: u8 = 0b1010_0000;
+const IB_TAG_MIN: u8 = 0b1100_0000;
+const IB_BOOL_FALSE: u8 = 0b1111_0100;
+const IB_BOOL_TRUE: u8 = 0b1111_0101;
+const IB_NULL: u8 = 0b1111_0110;
 
 /// Deserializes an instance of `T` from the bytes of an [`io::Read`] type.
 ///
@@ -105,6 +116,21 @@ where
             .next()
             .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.read.byte_offset()))?
     }
+
+    fn unexpected_type_err(&mut self, exp: &dyn Expected) -> Result<Error> {
+        let init_byte = self.parse_peek()?;
+        match init_byte {
+            IB_BOOL_FALSE => {
+                self.parse_next()?;
+                Ok(de::Error::invalid_type(Unexpected::Bool(false), exp))
+            }
+            IB_BOOL_TRUE => {
+                self.parse_next()?;
+                Ok(de::Error::invalid_type(Unexpected::Bool(true), exp))
+            }
+            _ => todo!(),
+        }
+    }
 }
 
 #[cfg(feature = "std")]
@@ -154,11 +180,23 @@ macro_rules! forward_deserialize_unsigned_integer {
 impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
     type Error = Error;
 
-    fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value>
+    fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
     where
         V: de::Visitor<'de>,
     {
-        todo!()
+        let init_byte = self.parse_next()?;
+
+        match init_byte {
+            IB_BOOL_FALSE => {
+                self.parse_next()?;
+                visitor.visit_bool(false)
+            }
+            IB_BOOL_TRUE => {
+                self.parse_next()?;
+                visitor.visit_bool(true)
+            }
+            _ => todo!(),
+        }
     }
 
     serde::forward_to_deserialize_any! {
@@ -173,12 +211,18 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
     where
         V: de::Visitor<'de>,
     {
-        let init_byte = self.parse_next()?;
+        let init_byte = self.parse_peek()?;
 
         match init_byte {
-            0b1111_0100 => visitor.visit_bool(false),
-            0b1111_0101 => visitor.visit_bool(true),
-            _ => todo!(),
+            IB_BOOL_FALSE => {
+                self.parse_next()?;
+                visitor.visit_bool(false)
+            }
+            IB_BOOL_TRUE => {
+                self.parse_next()?;
+                visitor.visit_bool(true)
+            }
+            _ => Err(self.unexpected_type_err(&"a boolean")?),
         }
     }
 
@@ -194,15 +238,13 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
     {
         let init_byte = self.parse_peek()?;
 
-        let is_neg = match init_byte & 0b1110_0000 {
-            0b0000_0000 => false,
-            0b0010_0000 => true,
+        let is_neg = match init_byte {
+            IB_UINT_MIN..IB_SINT_MIN => false,
+            IB_SINT_MIN..IB_BYTE_STR_MIN => true,
             _ => {
-                // Error
-                todo!()
+                return Err(self.unexpected_type_err(&visitor)?);
             }
         };
-
         self.parse_next()?;
 
         let arg_val = init_byte & 0b0001_1111;
@@ -325,8 +367,8 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
     {
         let init_byte = self.parse_peek()?;
 
-        match init_byte & 0b1110_0000 {
-            0b0100_0000 => {}
+        match init_byte {
+            IB_BYTE_STR_MIN..IB_TEXT_STR_MIN => {}
             _ => {
                 // Error
                 todo!()
@@ -358,7 +400,7 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
         let init_byte = self.parse_peek()?;
 
         match init_byte & 0b1110_0000 {
-            0b0110_0000 => {}
+            IB_TEXT_STR_MIN..IB_ARRAY_MIN => {}
             _ => {
                 // Error
                 todo!()
@@ -404,7 +446,7 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
         let init_byte = self.parse_next()?;
 
         match init_byte {
-            0b1111_0110 => visitor.visit_none(),
+            IB_NULL => visitor.visit_none(),
             _ => visitor.visit_some(self),
         }
     }
@@ -423,8 +465,8 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
     {
         let init_byte = self.parse_peek()?;
 
-        match init_byte & 0b1110_0000 {
-            0b1000_0000 => {}
+        match init_byte {
+            IB_ARRAY_MIN..IB_MAP_MIN => {}
             _ => {
                 // Error
                 todo!()
@@ -469,8 +511,8 @@ impl<'de, R: Read<'de>> de::Deserializer<'de> for &mut Deserializer<R> {
     {
         let init_byte = self.parse_peek()?;
 
-        match init_byte & 0b1110_0000 {
-            0b1010_0000 => {}
+        match init_byte {
+            IB_MAP_MIN..IB_TAG_MIN => {}
             _ => {
                 // Error
                 todo!()
