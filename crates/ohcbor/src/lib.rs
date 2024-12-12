@@ -47,3 +47,14 @@ pub use error::{Error, ErrorKind, Result};
 #[doc(inline)]
 #[cfg(feature = "std")]
 pub use de::from_reader;
+
+const IB_UINT_MIN: u8 = 0b0000_0000;
+const IB_SINT_MIN: u8 = 0b0010_0000;
+const IB_BYTE_STR_MIN: u8 = 0b0100_0000;
+const IB_TEXT_STR_MIN: u8 = 0b0110_0000;
+const IB_ARRAY_MIN: u8 = 0b1000_0000;
+const IB_MAP_MIN: u8 = 0b1010_0000;
+const IB_TAG_MIN: u8 = 0b1100_0000;
+const IB_BOOL_FALSE: u8 = 0b1111_0100;
+const IB_BOOL_TRUE: u8 = 0b1111_0101;
+const IB_NULL: u8 = 0b1111_0110;

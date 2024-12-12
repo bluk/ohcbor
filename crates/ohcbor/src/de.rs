@@ -1,7 +1,11 @@
 //! Deserializes CBOR data.
 
-use crate::error::{Error, ErrorKind, Result};
-use crate::read::{self, Read, Ref};
+use crate::{
+    error::{Error, ErrorKind, Result},
+    read::{self, Read, Ref},
+    IB_ARRAY_MIN, IB_BOOL_FALSE, IB_BOOL_TRUE, IB_BYTE_STR_MIN, IB_MAP_MIN, IB_NULL, IB_SINT_MIN,
+    IB_TAG_MIN, IB_TEXT_STR_MIN, IB_UINT_MIN,
+};
 use serde::de::{self, Expected, Unexpected};
 
 use core::str;
@@ -10,17 +14,6 @@ use core::str;
 use alloc::vec::Vec;
 #[cfg(feature = "std")]
 use std::{io, vec::Vec};
-
-const IB_UINT_MIN: u8 = 0b0000_0000;
-const IB_SINT_MIN: u8 = 0b0010_0000;
-const IB_BYTE_STR_MIN: u8 = 0b0100_0000;
-const IB_TEXT_STR_MIN: u8 = 0b0110_0000;
-const IB_ARRAY_MIN: u8 = 0b1000_0000;
-const IB_MAP_MIN: u8 = 0b1010_0000;
-const IB_TAG_MIN: u8 = 0b1100_0000;
-const IB_BOOL_FALSE: u8 = 0b1111_0100;
-const IB_BOOL_TRUE: u8 = 0b1111_0101;
-const IB_NULL: u8 = 0b1111_0110;
 
 /// Deserializes an instance of `T` from the bytes of an [`io::Read`] type.
 ///
