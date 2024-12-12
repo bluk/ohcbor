@@ -1,6 +1,9 @@
-//! [Read] trait and helpers to read bytes for the deserializer.
+//! [Read] trait and helpers to read bytes for the decoder.
 
-use crate::error::{Error, ErrorKind, Result};
+use crate::{
+    buf::Buffer,
+    error::{Error, ErrorKind, Result},
+};
 use core::ops::Deref;
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
@@ -13,36 +16,33 @@ use std::io;
 /// The variant determines if the slice comes from a long lived source (e.g. an
 /// existing byte array) or if it comes from a temporary buffer.
 ///
-/// In the deserializer code, the different variants determine which visitor
-/// method to call (e.g. `visit_borrowed_str` vs. `visit_str`).  Each variant
-/// has a different lifetime which is what the compiler uses to ensure the data
-/// will live long enough.
+/// In the decoder code, the different variants determine which visitor method
+/// to call (e.g. `visit_borrowed_str` vs. `visit_str`).  Each variant has a
+/// different lifetime which is what the compiler uses to ensure the data will
+/// live long enough.
 #[derive(Debug)]
-pub enum Ref<'a, 'b, T>
-where
-    T: 'static + ?Sized,
-{
+pub enum Ref<'a, 'b, B> {
     /// Reference from the original source of data.
-    Source(&'a T),
+    Source(&'a [u8]),
     /// Reference from the given data buffer.
-    Buffer(&'b T),
+    Buffer(&'b B),
 }
 
-impl<T> Deref for Ref<'_, '_, T>
+impl<B> Deref for Ref<'_, '_, B>
 where
-    T: 'static + ?Sized,
+    B: Buffer,
 {
-    type Target = T;
+    type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
         match *self {
             Ref::Source(s) => s,
-            Ref::Buffer(b) => b,
+            Ref::Buffer(b) => b.as_slice(),
         }
     }
 }
 
-/// Trait used by the [`de::Deserializer`][crate::de::Deserializer] to read bytes.
+/// Trait used by the [`decode::Decoder`][crate::decode::Decoder] to read bytes.
 pub trait Read<'a> {
     /// Consumes and returns the next read byte.
     fn next(&mut self) -> Option<Result<u8>>;
@@ -72,7 +72,9 @@ pub trait Read<'a> {
     ///
     /// - malformatted input
     /// - end of file
-    fn read_exact<'b>(&'b mut self, len: usize, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>>;
+    fn read_exact<'b, B>(&mut self, len: usize, buf: &'b mut B) -> Result<Ref<'a, 'b, B>>
+    where
+        B: Buffer;
 
     /// Parses the argument as a length.
     ///
@@ -158,7 +160,10 @@ where
         self.byte_offset
     }
 
-    fn read_exact<'b>(&'b mut self, len: usize, buf: &'b mut Vec<u8>) -> Result<Ref<'a, 'b, [u8]>> {
+    fn read_exact<'b, B>(&mut self, len: usize, buf: &'b mut B) -> Result<Ref<'a, 'b, B>>
+    where
+        B: Buffer,
+    {
         debug_assert!(buf.is_empty());
 
         buf.reserve(len);
@@ -169,7 +174,7 @@ where
             })??);
         }
 
-        Ok(Ref::Buffer(&buf[..]))
+        Ok(Ref::Buffer(buf))
     }
 
     fn parse_len(&mut self, init_byte: u8) -> Result<Option<usize>> {
@@ -277,11 +282,10 @@ impl<'a> Read<'a> for SliceRead<'a> {
         self.byte_offset
     }
 
-    fn read_exact<'b>(
-        &'b mut self,
-        len: usize,
-        _buf: &'b mut Vec<u8>,
-    ) -> Result<Ref<'a, 'b, [u8]>> {
+    fn read_exact<'b, B>(&mut self, len: usize, _buf: &'b mut B) -> Result<Ref<'a, 'b, B>>
+    where
+        B: Buffer,
+    {
         let start_idx = self.byte_offset;
         self.byte_offset += len;
 

@@ -4,11 +4,47 @@
 //! Object Representation (CBOR)][cbor] data format. CBOR is specified in [RFC
 //! 8949][rfc_8949]. Imagine starting with the JSON data model, making it more
 //! efficient by using a binary (instead of plain text) format, and adding some
-//! extensibility to allow more types.
+//! extensibility via tagging data.
 //!
-//! It uses the [Serde][serde] library to serialize and deserialize CBOR data.
-//! It is similar to [Serde JSON][serde_json] in terms of functionality and
-//! implementation.
+//! # Forking Serde
+//!
+//! While this library started as a Serde implementation for CBOR, this library
+//! is now a fork of Serde's traits and implementation specialized for CBOR.
+//!
+//! [`Decode`][decode::Decode] is a fork of the
+//! [`Deserialize`][serde_deserialize] trait, [`Decoder`][decode::Decoder]
+//! is a fork of the [`Deserializer`][serde_deserializer] trait, and so
+//! forth.
+//!
+//! They were forked due to several unique properties of `CBOR` which are not
+//! directly supported by Serde's data model. In this context, a `data model` is
+//! defined as support for data types such as strings, floating point numbers,
+//! booleans, integers, arrays/sequences, maps, enums, and so forth. For
+//! instance, JSON supports strings, numbers, objects, arrays, booleans, and
+//! null. JSON does not directly support types like binary data (byte strings),
+//! so JSON users have to use workarounds like base64 encoding the binary data
+//! into a string to encode binary data,.
+//!
+//! Serde provides a framework to deserialize any data format into its own data
+//! model. Then, Serde provides a way to map data from its own data model into a
+//! Rust type. Serde's data model does not explicitly support concepts such as
+//! CBOR's data tags or distinct values for `undefined` and `null`.
+//!
+//! ## Advantages of Forking
+//!
+//! * Support CBOR tags directly
+//! * Support simple types like `null` and `undefined` with distinct values
+//! * Removal of unit type, enums, and other Serde data model types which do not
+//!   exist in CBOR
+//!
+//! ## Disadvantages of Forking
+//!
+//! * Types (which may already implement/derive Serde's `Serialize` or
+//!   `Deserialize`) will need to implement/derive this crate's traits.
+//! * Lack of ecosystem support. Serde features have been adopted by many
+//!   libraries which this library will not have support for.
+//! * Greater maintenance required for this library (e.g. new features or bug
+//!   fixes to serde would need to be ported)
 //!
 //! ## License
 //!
@@ -26,7 +62,8 @@
 //! [cbor]: https://cbor.io/
 //! [rfc_8949]: https://www.rfc-editor.org/rfc/rfc8949.html
 //! [serde]: https://serde.rs
-//! [serde_json]: https://github.com/serde-rs/json
+//! [serde_deserialize]: https://docs.rs/serde/latest/serde/trait.Deserialize.html
+//! [serde_deserializer]: https://docs.rs/serde/latest/serde/trait.Deserializer.html
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -34,19 +71,17 @@
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 extern crate alloc;
 
-mod de;
+pub mod decode;
 mod error;
 
+mod bstring;
+pub mod buf;
 pub mod read;
 
 #[doc(inline)]
-pub use de::{from_slice, Deserializer};
+pub use bstring::ByteString;
 #[doc(inline)]
 pub use error::{Error, ErrorKind, Result};
-
-#[doc(inline)]
-#[cfg(feature = "std")]
-pub use de::from_reader;
 
 const IB_UINT_MIN: u8 = 0b0000_0000;
 const IB_SINT_MIN: u8 = 0b0010_0000;
@@ -58,3 +93,49 @@ const IB_TAG_MIN: u8 = 0b1100_0000;
 const IB_BOOL_FALSE: u8 = 0b1111_0100;
 const IB_BOOL_TRUE: u8 = 0b1111_0101;
 const IB_NULL: u8 = 0b1111_0110;
+
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::{io, vec::Vec};
+
+/// Decode an instance of `T` from the bytes of an [`io::Read`] type.
+///
+/// The entire [`io::Read`] source is consumed, and it is an error if there is
+/// trailing data.
+///
+/// # Errors
+///
+/// Decoding can fail if the data is not valid, if the data cannot cannot be
+/// decoded into an instance of `T`, if there is trailing data, and other IO
+/// errors.
+#[cfg(feature = "std")]
+pub fn from_reader<R, T>(r: R) -> Result<T>
+where
+    R: io::Read,
+    T: for<'de> decode::Decode<'de>,
+{
+    let mut de = decode::decoders::DecoderImpl::new(read::IoRead::new(r), Vec::new());
+    let value = T::decode(&mut de)?;
+    de.end()?;
+    Ok(value)
+}
+
+/// Decode an instance of `T` from a slice of bytes.
+///
+/// The entire slice of bytes is consumed, and it is an error if there is
+/// trailing data.
+///
+/// # Errors
+///
+/// Decoding can fail if the data is not valid, if the data cannot be decoded
+/// into an instance of `T`, if there is trailing data, and other IO errors.
+pub fn from_slice<'a, T>(s: &'a [u8]) -> Result<T>
+where
+    T: decode::Decode<'a>,
+{
+    let mut de = decode::decoders::DecoderImpl::new(read::SliceRead::new(s), Vec::new());
+    let value = T::decode(&mut de)?;
+    de.end()?;
+    Ok(value)
+}

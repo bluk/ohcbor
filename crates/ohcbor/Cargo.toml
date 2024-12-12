@@ -7,12 +7,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-serde.workspace = true
 
 [dev-dependencies]
 hex-literal.workspace = true
-serde_derive.workspace = true
-serde_bytes.workspace = true
 
 [lints]
 workspace = true
@@ -20,9 +17,9 @@ workspace = true
 [features]
 default = ["std"]
 
-std = ["serde/std"]
+std = []
 
-alloc = ["serde/alloc"]
+alloc = []
 
 [package.metadata.docs.rs]
 all-features = true
