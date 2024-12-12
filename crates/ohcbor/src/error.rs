@@ -1,19 +1,9 @@
 //! Possible crate errors.
 
-use serde::{de, ser};
-
 #[cfg(all(feature = "alloc", not(feature = "std")))]
-use alloc::{
-    boxed::Box,
-    format,
-    string::{String, ToString},
-};
+use alloc::{boxed::Box, string::String};
 #[cfg(feature = "std")]
-use std::{
-    boxed::Box,
-    format,
-    string::{String, ToString},
-};
+use std::{boxed::Box, string::String};
 
 use core::{
     error,
@@ -25,7 +15,7 @@ use core::{
 /// Alias for a [`Result`][std::result::Result] with a [`ohcbor::Error`][Error] error type.
 pub type Result<T> = result::Result<T, Error>;
 
-/// Errors during serialization and deserialization.
+/// Errors during encoding and decoding.
 pub struct Error {
     inner: Box<ErrorImpl>,
 }
@@ -42,12 +32,6 @@ impl Error {
         Self {
             inner: Box::new(ErrorImpl { kind, byte_offset }),
         }
-    }
-
-    #[must_use]
-    #[inline]
-    pub(crate) fn with_kind(kind: ErrorKind) -> Self {
-        Self::new(kind, 0)
     }
 
     /// The kind of error encountered
@@ -80,27 +64,9 @@ impl fmt::Debug for Error {
     }
 }
 
-impl de::StdError for Error {
+impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        self.inner.kind.source()
-    }
-}
-
-impl de::Error for Error {
-    fn custom<T: Display>(msg: T) -> Self {
-        Error::with_kind(ErrorKind::Deserialize(msg.to_string()))
-    }
-
-    fn invalid_type(unexp: de::Unexpected<'_>, exp: &dyn de::Expected) -> Self {
-        Error::with_kind(ErrorKind::Deserialize(format!(
-            "unexpected type error. invalid_type={unexp}, expected_type={exp}"
-        )))
-    }
-}
-
-impl ser::Error for Error {
-    fn custom<T: Display>(msg: T) -> Self {
-        Error::with_kind(ErrorKind::Serialize(msg.to_string()))
+        self.inner.source()
     }
 }
 
@@ -148,10 +114,10 @@ impl error::Error for ErrorImpl {
 #[allow(clippy::module_name_repetitions)]
 #[non_exhaustive]
 pub enum ErrorKind {
-    /// General deserialization error.
+    /// General decoding error.
     ///
     /// Usually the error is due to mismatching types (e.g. a struct was expecting an u64 but the data had a string).
-    Deserialize(String),
+    Decode(String),
     /// End of file was encountered while parsing a value.
     EofWhileParsingValue,
     /// Unparsed trailing data was detected
@@ -159,8 +125,8 @@ pub enum ErrorKind {
     #[cfg(feature = "std")]
     /// An I/O error.
     Io(std::io::Error),
-    /// General serialization error.
-    Serialize(String),
+    /// General encoding error.
+    Encode(String),
     /// An unsupported type was used during serialization.
     UnsupportedType,
     /// Data is not well formed.
@@ -176,7 +142,7 @@ pub enum ErrorKind {
 impl Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ErrorKind::Deserialize(str) | ErrorKind::Serialize(str) => f.write_str(str),
+            ErrorKind::Decode(str) | ErrorKind::Encode(str) => f.write_str(str),
             ErrorKind::EofWhileParsingValue => f.write_str("eof while parsing value"),
             ErrorKind::TrailingData => f.write_str("trailing data error"),
             ErrorKind::UnsupportedType => f.write_str("unsupported type"),
@@ -192,7 +158,7 @@ impl Display for ErrorKind {
 impl fmt::Debug for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ErrorKind::Deserialize(str) | ErrorKind::Serialize(str) => f.write_str(str),
+            ErrorKind::Decode(str) | ErrorKind::Encode(str) => f.write_str(str),
             ErrorKind::EofWhileParsingValue => f.write_str("eof while parsing value"),
             ErrorKind::TrailingData => f.write_str("trailing data error"),
             ErrorKind::UnsupportedType => f.write_str("unsupported type"),
@@ -208,10 +174,10 @@ impl fmt::Debug for ErrorKind {
 impl error::Error for ErrorKind {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            ErrorKind::Deserialize(_)
+            ErrorKind::Decode(_)
             | ErrorKind::EofWhileParsingValue
             | ErrorKind::TrailingData
-            | ErrorKind::Serialize(_)
+            | ErrorKind::Encode(_)
             | ErrorKind::UnsupportedType
             | ErrorKind::NotWellFormed
             | ErrorKind::InvalidLen => None,
