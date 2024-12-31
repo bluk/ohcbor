@@ -11,7 +11,10 @@ use alloc::{string::String, vec::Vec};
 #[cfg(feature = "std")]
 use std::{string::String, vec::Vec};
 
-use crate::decode::{ArrAccess, Decode, Visitor};
+use crate::{
+    decode::{ArrAccess, Decode, Visitor},
+    encode::{Encode, Encoder},
+};
 
 /// A sequence of bytes like a `Vec<u8>`.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -82,6 +85,15 @@ impl From<String> for ByteString {
 impl From<Vec<u8>> for ByteString {
     fn from(value: Vec<u8>) -> Self {
         Self(value)
+    }
+}
+
+impl Encode for ByteString {
+    fn encode<E>(&self, encoder: E) -> Result<E::Ok, E::Error>
+    where
+        E: Encoder,
+    {
+        encoder.encode_bytes(&self.0)
     }
 }
 
