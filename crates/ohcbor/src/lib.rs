@@ -78,6 +78,7 @@ mod error;
 mod bstring;
 pub mod buf;
 pub mod read;
+pub mod write;
 
 #[doc(inline)]
 pub use bstring::ByteString;
@@ -139,4 +140,39 @@ where
     let value = T::decode(&mut de)?;
     de.end()?;
     Ok(value)
+}
+
+/// Encodes an instance of `T` into the writer `W` as CBOR data.
+///
+/// # Errors
+///
+/// Encoding can fail if `T`'s implementation of [`Encode`] decides to fail, if
+/// or `T` contains unsupported types for encoding.
+#[cfg(feature = "std")]
+#[inline]
+pub fn to_writer<W, T>(writer: W, value: &T) -> Result<()>
+where
+    W: io::Write,
+    T: ?Sized + encode::Encode,
+{
+    let mut enc = encode::encoders::Encoder::new(write::IoWrite::new(writer));
+    value.encode(&mut enc)?;
+    Ok(())
+}
+
+/// Encodes an instance of `T` into a new [Vec] as CBOR data.
+///
+/// # Errors
+///
+/// Encoding can fail if `T`'s implemenation of [`Encode`] decides to fail or if
+/// `T` contains unsupported types for serialization.
+#[inline]
+pub fn to_vec<T>(value: &T) -> Result<Vec<u8>>
+where
+    T: ?Sized + encode::Encode,
+{
+    let mut writer = Vec::new();
+    let mut enc = encode::encoders::Encoder::new(&mut writer);
+    value.encode(&mut enc)?;
+    Ok(writer)
 }

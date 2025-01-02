@@ -96,9 +96,12 @@
 //! [serde_serialize]: https://docs.rs/serde/latest/serde/trait.Serialize.html
 //! [serde_serializer]: https://docs.rs/serde/latest/serde/ser/trait.Serializer.html
 
+pub(crate) mod encoders;
 mod fmt;
 mod impls;
 mod impossible;
+
+use crate::ErrorKind;
 
 pub use self::impossible::Impossible;
 
@@ -114,6 +117,15 @@ pub trait Error: Sized + core::error::Error {
     fn custom<T>(msg: T) -> Self
     where
         T: core::fmt::Display;
+}
+
+impl Error for crate::Error {
+    fn custom<T>(msg: T) -> Self
+    where
+        T: core::fmt::Display,
+    {
+        crate::Error::new(ErrorKind::Decode(msg.to_string()), 0)
+    }
 }
 
 /// A **data structure** that can be encoded to the CBOR data format.
