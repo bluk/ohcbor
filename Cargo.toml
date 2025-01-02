@@ -19,7 +19,7 @@ quote = "1.0.37"
 rayon = "1.10.0"
 strum = "0.26.3"
 strum_macros = "0.26.4"
-syn = { version = "2.0.89", features = ["full", "extra-traits"] }
+syn = { version = "2.0.94", features = ["full", "extra-traits"] }
 xshell = "0.2.7"
 
 [workspace.lints.rust]
