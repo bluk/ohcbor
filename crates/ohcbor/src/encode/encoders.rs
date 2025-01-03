@@ -1,8 +1,9 @@
 use crate::{
     encode::{self, Encode},
-    error::{Error, ErrorKind, Result},
+    error::{Error, Result},
     write::Write,
-    IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_MAP_MIN, IB_SINT_MIN, IB_TEXT_STR_MIN,
+    Simple, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN, IB_SINT_MIN,
+    IB_TEXT_STR_MIN,
 };
 
 /// A CBOR Encoder for types which implement [`Encode`].
@@ -68,11 +69,6 @@ where
 
     type EncodeArr = EncodeArr<'a, W>;
     type EncodeMap = EncodeMap<'a, W>;
-
-    #[inline]
-    fn encode_bool(self, _value: bool) -> Result<()> {
-        Err(Error::new(ErrorKind::UnsupportedType, 0))
-    }
 
     #[inline]
     fn encode_i8(self, value: i8) -> Result<()> {
@@ -293,11 +289,6 @@ where
     }
 
     #[inline]
-    fn encode_none(self) -> Result<()> {
-        todo!()
-    }
-
-    #[inline]
     fn encode_arr(self, len: Option<usize>) -> Result<Self::EncodeArr> {
         if let Some(len) = len {
             self.write_init_byte_len(IB_ARRAY_MIN, len)?;
@@ -315,6 +306,21 @@ where
             self.writer.write_all(&[IB_MAP_MIN | 31])?;
         }
         Ok(EncodeMap::new(self, len))
+    }
+
+    #[inline]
+    fn encode_simple<I>(self, v: I) -> Result<()>
+    where
+        I: Into<Simple>,
+    {
+        let v = u8::from(v.into());
+        if v < 24 {
+            self.writer.write_all(&[IB_FP_SIMPLE_MIN | v])
+        } else if (24..32).contains(&v) {
+            todo!()
+        } else {
+            self.writer.write_all(&[IB_FP_SIMPLE_MIN | 24, v])
+        }
     }
 }
 
@@ -443,7 +449,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::from_slice;
+    use crate::{from_slice, Simple};
 
     #[cfg(all(feature = "alloc", not(feature = "std")))]
     use alloc::{collections::BTreeMap, string::String, vec::Vec};
@@ -552,6 +558,20 @@ mod tests {
         fn test_map(v in prop::collection::btree_map(".*", ".*", 0..256)) {
             let output = to_vec(&v)?;
             let decoded_v = from_slice::<BTreeMap<String, String>>(&output)?;
+            assert_eq!(v, decoded_v);
+        }
+
+        #[test]
+        fn test_simple_value_less_than_24(v in ((0..=23u8).prop_map(Simple::new))) {
+            let output = to_vec(&v)?;
+            let decoded_v = from_slice::<Simple>(&output)?;
+            assert_eq!(v, decoded_v);
+        }
+
+        #[test]
+        fn test_simple_value_greater_than_31(v in ((32..=u8::MAX).prop_map(Simple::new))) {
+            let output = to_vec(&v)?;
+            let decoded_v = from_slice::<Simple>(&output)?;
             assert_eq!(v, decoded_v);
         }
     }

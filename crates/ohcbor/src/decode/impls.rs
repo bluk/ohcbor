@@ -25,9 +25,16 @@ use std::{
     vec::Vec,
 };
 
-use crate::decode::{seed::InPlaceSeed, ArrAccess, Decode, Decoder, Error, Unexpected, Visitor};
 #[cfg(any(feature = "alloc", feature = "std"))]
 use crate::decode::{size_hint, MapAccess};
+use crate::{
+    decode::{
+        seed::InPlaceSeed,
+        value::{ArrAccessDecoder, BorrowedBytesDecoder, BorrowedStrDecoder, MapAccessDecoder},
+        ArrAccess, Decode, Decoder, Error, IntoDecoder, Unexpected, Visitor,
+    },
+    Simple,
+};
 
 impl<'de> Decode<'de> for bool {
     fn decode<D>(decoder: D) -> Result<Self, D::Error>
@@ -43,11 +50,19 @@ impl<'de> Decode<'de> for bool {
                 f.write_str("a boolean")
             }
 
-            fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+            fn visit_simple<E>(self, v: Simple) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(v)
+                let Some(v) = v.as_bool() else {
+                    return Err(Error::invalid_value(Unexpected::from(v), &self));
+                };
+
+                if v {
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
             }
         }
 
@@ -567,6 +582,7 @@ impl<'de, T> Decode<'de> for Option<T>
 where
     T: Decode<'de>,
 {
+    #[allow(clippy::too_many_lines)]
     fn decode<D>(decoder: D) -> Result<Self, D::Error>
     where
         D: Decoder<'de>,
@@ -585,76 +601,131 @@ where
                 f.write_str("option")
             }
 
-            #[inline]
-            fn visit_null<E>(self) -> Result<Self::Value, E>
+            fn visit_i8<E>(self, v: i8) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(None)
+                T::decode(v.into_decoder()).map(Some)
             }
 
-            #[inline]
-            fn visit_undefined<E>(self) -> Result<Self::Value, E>
+            fn visit_i16<E>(self, v: i16) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                Ok(None)
+                T::decode(v.into_decoder()).map(Some)
             }
 
-            fn visit_some<D>(self, decoder: D) -> Result<Self::Value, D::Error>
+            fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
             where
-                D: Decoder<'a>,
+                E: Error,
             {
-                T::decode(decoder).map(Some)
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_u16<E>(self, v: u16) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_borrowed_str<E>(self, v: &'a str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(BorrowedStrDecoder::new(v)).map(Some)
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_borrowed_bytes<E>(self, v: &'a [u8]) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(BorrowedBytesDecoder::new(v)).map(Some)
+            }
+
+            fn visit_arr<A>(self, arr: A) -> Result<Self::Value, A::Error>
+            where
+                A: ArrAccess<'a>,
+            {
+                T::decode(ArrAccessDecoder::new(arr)).map(Some)
+            }
+
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'a>,
+            {
+                T::decode(MapAccessDecoder::new(map)).map(Some)
+            }
+
+            fn visit_simple<E>(self, v: Simple) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                if v.is_null() {
+                    return Ok(None);
+                }
+
+                T::decode(v.into_decoder()).map(Some)
             }
         }
 
-        decoder.decode_option(OptionsVisitor { ty: PhantomData })
-    }
-}
-
-impl<'de, T> Decode<'de> for PhantomData<T>
-where
-    T: ?Sized,
-{
-    fn decode<D>(decoder: D) -> Result<Self, D::Error>
-    where
-        D: Decoder<'de>,
-    {
-        struct PhantomDataVisitor<T: ?Sized> {
-            marker: PhantomData<T>,
-        }
-
-        impl<T> Visitor<'_> for PhantomDataVisitor<T>
-        where
-            T: ?Sized,
-        {
-            type Value = PhantomData<T>;
-
-            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("unit")
-            }
-
-            #[inline]
-            fn visit_null<E>(self) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                Ok(PhantomData)
-            }
-
-            #[inline]
-            fn visit_undefined<E>(self) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                Ok(PhantomData)
-            }
-        }
-
-        decoder.decode_any(PhantomDataVisitor {
-            marker: PhantomData,
-        })
+        decoder.decode_any(OptionsVisitor { ty: PhantomData })
     }
 }
 

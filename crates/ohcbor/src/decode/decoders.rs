@@ -3,8 +3,8 @@ use crate::{
     decode::{ArrAccess, DecodeSeed, Decoder, Error, MapAccess, Visitor},
     error::ErrorKind,
     read::{Read, Ref},
-    IB_ARRAY_MIN, IB_BOOL_FALSE, IB_BOOL_TRUE, IB_BYTE_STR_MIN, IB_MAP_MIN, IB_NULL, IB_SINT_MIN,
-    IB_TAG_MIN, IB_TEXT_STR_MIN, IB_UINT_MIN,
+    Simple, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN, IB_SINT_MIN, IB_TAG_MIN,
+    IB_TEXT_STR_MIN, IB_UINT_MIN,
 };
 
 pub(crate) struct DecoderImpl<R, B> {
@@ -41,13 +41,6 @@ where
             ))),
             None => Ok(()),
         }
-    }
-
-    #[inline]
-    fn parse_peek(&mut self) -> Result<u8, crate::Error> {
-        self.read.peek().ok_or_else(|| {
-            crate::Error::new(ErrorKind::EofWhileParsingValue, self.read.byte_offset())
-        })?
     }
 
     #[inline]
@@ -240,25 +233,33 @@ where
                     count: 0,
                 })
             }
-            IB_BOOL_FALSE => visitor.visit_bool(false),
-            IB_BOOL_TRUE => visitor.visit_bool(true),
-            IB_NULL => visitor.visit_null(),
-            _ => todo!(),
-        }
-    }
-
-    fn decode_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where
-        V: Visitor<'de>,
-    {
-        let init_byte = self.parse_peek()?;
-
-        match init_byte {
-            IB_NULL => {
-                self.parse_next()?;
-                visitor.visit_null()
+            IB_FP_SIMPLE_MIN..=0xff => {
+                let arg_val = init_byte & 0b0001_1111;
+                match arg_val {
+                    0..24 => visitor.visit_simple(Simple::from(arg_val)),
+                    24 => {
+                        let val = self.parse_next()?;
+                        if val < 32 {
+                            Err(Error::malformed(self.read.byte_offset()))
+                        } else {
+                            visitor.visit_simple(Simple::from(val))
+                        }
+                    }
+                    25 => {
+                        todo!()
+                    }
+                    26 => {
+                        todo!()
+                    }
+                    27 => {
+                        todo!()
+                    }
+                    28..=31 => Err(Error::malformed(self.read.byte_offset())),
+                    _ => {
+                        unreachable!()
+                    }
+                }
             }
-            _ => visitor.visit_some(self),
         }
     }
 }
@@ -362,13 +363,6 @@ where
         V: Visitor<'de>,
     {
         self.de.decode_any(visitor)
-    }
-
-    fn decode_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where
-        V: Visitor<'de>,
-    {
-        self.de.decode_option(visitor)
     }
 }
 

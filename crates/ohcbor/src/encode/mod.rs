@@ -101,7 +101,7 @@ use alloc::string::ToString;
 #[cfg(feature = "std")]
 use std::string::ToString;
 
-use crate::ErrorKind;
+use crate::{ErrorKind, Simple};
 
 #[cfg(any(feature = "alloc", feature = "std"))]
 pub(crate) mod encoders;
@@ -173,9 +173,6 @@ pub trait Encoder: Sized {
     /// the map.
     type EncodeMap: EncodeMap<Ok = Self::Ok, Error = Self::Error>;
 
-    /// Encodes a `bool` value.
-    fn encode_bool(self, v: bool) -> Result<Self::Ok, Self::Error>;
-
     /// Encode an `i8` value.
     fn encode_i8(self, v: i8) -> Result<Self::Ok, Self::Error>;
 
@@ -218,9 +215,6 @@ pub trait Encoder: Sized {
     /// Encode a chunk of raw byte data.
     fn encode_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error>;
 
-    /// Encode an [`Option::None`].
-    fn encode_none(self) -> Result<Self::Ok, Self::Error>;
-
     /// Begin to encode a variably sized array. This call must be
     /// followed by zero or more calls to `encode_element`, then a call to
     /// `end`.
@@ -235,6 +229,11 @@ pub trait Encoder: Sized {
     /// The argument is the number of elements in the map, which may or may not
     /// be computable before the map is iterated.
     fn encode_map(self, len: Option<usize>) -> Result<Self::EncodeMap, Self::Error>;
+
+    /// Encode a simple value.
+    fn encode_simple<I>(self, v: I) -> Result<Self::Ok, Self::Error>
+    where
+        I: Into<Simple>;
 
     /// Collect an iterator as an array.
     ///

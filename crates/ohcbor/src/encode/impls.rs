@@ -29,7 +29,10 @@ use std::{
     vec::Vec,
 };
 
-use crate::encode::{Encode, EncodeArr, Encoder, Error};
+use crate::{
+    encode::{Encode, EncodeArr, Encoder, Error},
+    simple::{SIMPLE_VALUE_FALSE, SIMPLE_VALUE_NULL, SIMPLE_VALUE_TRUE},
+};
 
 macro_rules! primitive_impl {
     ($ty:ident, $method:ident $($cast:tt)*) => {
@@ -45,7 +48,6 @@ macro_rules! primitive_impl {
     }
 }
 
-primitive_impl!(bool, encode_bool);
 primitive_impl!(isize, encode_i64 as i64);
 primitive_impl!(i8, encode_i8);
 primitive_impl!(i16, encode_i16);
@@ -60,6 +62,20 @@ primitive_impl!(u64, encode_u64);
 primitive_impl!(u128, encode_u128);
 primitive_impl!(f32, encode_f32);
 primitive_impl!(f64, encode_f64);
+
+impl Encode for bool {
+    #[inline]
+    fn encode<E>(&self, encoder: E) -> Result<E::Ok, E::Error>
+    where
+        E: Encoder,
+    {
+        if *self {
+            encoder.encode_simple(SIMPLE_VALUE_TRUE)
+        } else {
+            encoder.encode_simple(SIMPLE_VALUE_FALSE)
+        }
+    }
+}
 
 impl Encode for str {
     #[inline]
@@ -103,7 +119,7 @@ where
     {
         match self {
             Some(v) => v.encode(encoder),
-            None => encoder.encode_none(),
+            None => encoder.encode_simple(SIMPLE_VALUE_NULL),
         }
     }
 }

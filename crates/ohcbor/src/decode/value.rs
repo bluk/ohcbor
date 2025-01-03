@@ -22,8 +22,12 @@ use std::{
 };
 
 use self::private::{First, Second};
-use crate::decode::{
-    self, size_hint, ArrAccess, DecodeSeed, Decoder, Expected, IntoDecoder, MapAccess, Visitor,
+use crate::{
+    decode::{
+        self, size_hint, ArrAccess, DecodeSeed, Decoder, Expected, IntoDecoder, MapAccess, Visitor,
+    },
+    simple::{SIMPLE_VALUE_FALSE, SIMPLE_VALUE_TRUE},
+    Simple,
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -185,21 +189,85 @@ macro_rules! primitive_deserializer {
     }
 }
 
-primitive_deserializer!(bool, "a `bool`.", BoolDecoder, visit_bool);
 primitive_deserializer!(i8, "an `i8`.", I8Decoder, visit_i8);
 primitive_deserializer!(i16, "an `i16`.", I16Decoder, visit_i16);
 primitive_deserializer!(i32, "an `i32`.", I32Decoder, visit_i32);
 primitive_deserializer!(i64, "an `i64`.", I64Decoder, visit_i64);
 primitive_deserializer!(i128, "an `i128`.", I128Decoder, visit_i128);
-primitive_deserializer!(isize, "an `isize`.", IsizeDecoder, visit_i64 as i64);
 primitive_deserializer!(u8, "a `u8`.", U8Decoder, visit_u8);
 primitive_deserializer!(u16, "a `u16`.", U16Decoder, visit_u16);
 primitive_deserializer!(u32, "a `u32`.", U32Decoder, visit_u32);
 primitive_deserializer!(u64, "a `u64`.", U64Decoder, visit_u64);
 primitive_deserializer!(u128, "a `u128`.", U128Decoder, visit_u128);
-primitive_deserializer!(usize, "a `usize`.", UsizeDecoder, visit_u64 as u64);
 // TODO: primitive_deserializer!(f32, "an `f32`.", F32Decoder, visit_f32);
 // TODO: primitive_deserializer!(f64, "an `f64`.", F64Decoder, visit_f64);
+
+/// A decoder holding a `bool`.
+pub struct BoolDecoder<E> {
+    value: bool,
+    marker: PhantomData<E>,
+}
+
+impl_copy_clone!(BoolDecoder);
+
+impl<E> IntoDecoder<'_, E> for bool
+where
+    E: decode::Error,
+{
+    type Decoder = BoolDecoder<E>;
+
+    fn into_decoder(self) -> BoolDecoder<E> {
+        BoolDecoder::new(self)
+    }
+}
+
+impl<E> BoolDecoder<E> {
+    #[expect(missing_docs)]
+    #[must_use]
+    pub fn new(value: bool) -> Self {
+        Self {
+            value,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'de, E> Decoder<'de> for BoolDecoder<E>
+where
+    E: decode::Error,
+{
+    type Error = E;
+
+    fn decode_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        if self.value {
+            visitor.visit_simple(Simple::new(SIMPLE_VALUE_TRUE))
+        } else {
+            visitor.visit_simple(Simple::new(SIMPLE_VALUE_FALSE))
+        }
+    }
+}
+
+impl<E> IntoDecoder<'_, E> for BoolDecoder<E>
+where
+    E: decode::Error,
+{
+    type Decoder = Self;
+
+    fn into_decoder(self) -> Self {
+        self
+    }
+}
+
+impl<E> fmt::Debug for BoolDecoder<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("BoolDecoder")
+            .field("value", &self.value)
+            .finish()
+    }
+}
 
 /// A decoder holding a `&str`.
 pub struct StrDecoder<'a, E> {
@@ -1207,4 +1275,67 @@ mod private {
 
     pub(crate) type First<T> = <T as Pair>::First;
     pub(crate) type Second<T> = <T as Pair>::Second;
+}
+
+/// A decoder holding a [`Simple`].
+pub struct SimpleDecoder<E> {
+    value: Simple,
+    marker: PhantomData<E>,
+}
+
+impl_copy_clone!(SimpleDecoder);
+
+impl<E> IntoDecoder<'_, E> for Simple
+where
+    E: decode::Error,
+{
+    type Decoder = SimpleDecoder<E>;
+
+    fn into_decoder(self) -> SimpleDecoder<E> {
+        SimpleDecoder::new(self)
+    }
+}
+
+impl<E> SimpleDecoder<E> {
+    #[expect(missing_docs)]
+    #[must_use]
+    pub fn new(value: Simple) -> Self {
+        SimpleDecoder {
+            value,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<'de, E> Decoder<'de> for SimpleDecoder<E>
+where
+    E: decode::Error,
+{
+    type Error = E;
+
+    fn decode_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_simple(self.value)
+    }
+}
+
+impl<E> IntoDecoder<'_, E> for SimpleDecoder<E>
+where
+    E: decode::Error,
+{
+    type Decoder = Self;
+
+    fn into_decoder(self) -> Self {
+        self
+    }
+}
+
+impl<E> fmt::Debug for SimpleDecoder<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SimpleDecoder")
+            .field("value", &self.value)
+            .finish()
+    }
 }

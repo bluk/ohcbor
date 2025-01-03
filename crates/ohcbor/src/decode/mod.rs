@@ -32,7 +32,6 @@
 //!  - **Common standard library types**:
 //!    - `String`
 //!    - `Option<T>`
-//!    - `PhantomData<T>`
 //!  - **Wrapper types**:
 //!    - `Box<T>`
 //!    - `Box<[T]>`
@@ -64,6 +63,7 @@
 //!    - `char`
 //!  - **Common standard library types**:
 //!    - `Result<T, E>`
+//!    - `PhantomData<T>`
 //!  - **Wrapper types**:
 //!    - `Rc<T>`
 //!    - `Arc<T>`
@@ -99,7 +99,7 @@ use alloc::string::ToString;
 #[cfg(feature = "std")]
 use std::string::ToString;
 
-use crate::error::ErrorKind;
+use crate::{error::ErrorKind, Simple};
 
 #[cfg(any(feature = "alloc", feature = "std"))]
 pub(crate) mod decoders;
@@ -175,9 +175,6 @@ pub trait Error: Sized + core::error::Error {
 /// `invalid_length` methods of the `Error` trait to build error messages.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Unexpected<'a> {
-    /// The input contained a boolean value that was not expected.
-    Bool(bool),
-
     /// The input contained an unsigned integer `u8` that was not expected.
     UnsignedU8(u8),
     /// The input contained an unsigned integer `u16` that was not expected.
@@ -205,17 +202,13 @@ pub enum Unexpected<'a> {
     /// The input contained a byte string that was not expected.
     Bytes(&'a [u8]),
 
-    /// The input contained a `null` value that was not expected.
-    Null,
-    /// The input contained an `undefined` value that was not expected.
-    Undefined,
-    /// The input contained  an `Option<T>` that was not expected.
-    Option,
-
     /// The input contained  an array that was not expected.
     Array,
     /// The input contained  a map that was not expected.
     Map,
+
+    /// The input contained a simple value that was not expected
+    Simple(Simple),
 }
 
 macro_rules! unexpected_from {
@@ -238,11 +231,11 @@ unexpected_from!(i16:NegI16);
 unexpected_from!(i32:NegI32);
 unexpected_from!(i64:NegI64);
 unexpected_from!(i128:NegI128);
+unexpected_from!(Simple:Simple);
 
 impl fmt::Display for Unexpected<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            Unexpected::Bool(b) => write!(f, "boolean `{b}`"),
             Unexpected::UnsignedU8(n) => write!(f, "positive integer {n}"),
             Unexpected::UnsignedU16(n) => write!(f, "positive integer {n}"),
             Unexpected::UnsignedU32(n) => write!(f, "positive integer {n}"),
@@ -255,11 +248,9 @@ impl fmt::Display for Unexpected<'_> {
             Unexpected::NegI128(n) => write!(f, "negative integer {n}"),
             Unexpected::Str(s) => write!(f, "string {s}"),
             Unexpected::Bytes(_) => write!(f, "bytes array"),
-            Unexpected::Null => write!(f, "null"),
-            Unexpected::Undefined => write!(f, "undefined"),
-            Unexpected::Option => write!(f, "Option value"),
             Unexpected::Array => write!(f, "array"),
             Unexpected::Map => write!(f, "map"),
+            Unexpected::Simple(s) => write!(f, "simple value `{s}`"),
         }
     }
 }
@@ -467,19 +458,6 @@ pub trait Decoder<'de>: Sized {
     fn decode_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>;
-
-    /// Decodes the next value as an `Option<T>`.
-    ///
-    /// # Errors
-    ///
-    /// Any error with decoding will be returned as an error including invalid
-    /// types, invalid values, end of file, and so forth.
-    fn decode_option<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where
-        V: Visitor<'de>,
-    {
-        visitor.visit_some(self)
-    }
 }
 
 /// This trait represents a visitor that walks through a decoder.
@@ -506,21 +484,6 @@ pub trait Visitor<'de>: Sized {
     ///
     /// Errors when formatting a message can be returned.
     fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result;
-
-    /// The input contains a boolean.
-    ///
-    /// The default implementation fails with a type error.
-    ///
-    /// # Errors
-    ///
-    /// Any error encountered during decoding or when creating the `Self::Value`
-    /// type can be returned.
-    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        Err(Error::invalid_type(Unexpected::Bool(v), &self))
-    }
 
     /// The input contains an `i8`.
     ///
@@ -744,51 +707,6 @@ pub trait Visitor<'de>: Sized {
         self.visit_bytes(v)
     }
 
-    /// The input contains a `null` value.
-    ///
-    /// The default implementation fails with a type error.
-    ///
-    /// # Errors
-    ///
-    /// Any error encountered during decoding or when creating the `Self::Value`
-    /// type can be returned.
-    fn visit_null<E>(self) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        Err(Error::invalid_type(Unexpected::Null, &self))
-    }
-
-    /// The input contains an `undefined` value.
-    ///
-    /// The default implementation fails with a type error.
-    ///
-    /// # Errors
-    ///
-    /// Any error encountered during decoding or when creating the `Self::Value`
-    /// type can be returned.
-    fn visit_undefined<E>(self) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        Err(Error::invalid_type(Unexpected::Undefined, &self))
-    }
-
-    /// The input contains an optional that is present.
-    ///
-    /// The default implementation fails with a type error.
-    ///
-    /// # Errors
-    ///
-    /// Any error encountered during decoding or when creating the `Self::Value`
-    /// type can be returned.
-    fn visit_some<D>(self, _decoder: D) -> Result<Self::Value, D::Error>
-    where
-        D: Decoder<'de>,
-    {
-        Err(Error::invalid_type(Unexpected::Option, &self))
-    }
-
     /// The input contains an array of elements.
     ///
     /// The default implementation fails with a type error.
@@ -817,6 +735,21 @@ pub trait Visitor<'de>: Sized {
         A: MapAccess<'de>,
     {
         Err(Error::invalid_type(Unexpected::Map, &self))
+    }
+
+    /// The input contains a simple value.
+    ///
+    /// The default implementation fails with a type error.
+    ///
+    /// # Errors
+    ///
+    /// Any error encountered during decoding or when creating the `Self::Value`
+    /// type can be returned.
+    fn visit_simple<E>(self, v: Simple) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Err(Error::invalid_type(Unexpected::Simple(v), &self))
     }
 }
 

@@ -79,6 +79,7 @@ mod error;
 mod bstring;
 pub mod buf;
 pub mod read;
+pub mod simple;
 pub mod write;
 
 #[doc(inline)]
@@ -86,6 +87,8 @@ pub mod write;
 pub use bstring::ByteString;
 #[doc(inline)]
 pub use error::{Error, ErrorKind, Result};
+#[doc(inline)]
+pub use simple::Simple;
 
 const IB_UINT_MIN: u8 = 0b0000_0000;
 const IB_SINT_MIN: u8 = 0b0010_0000;
@@ -94,9 +97,7 @@ const IB_TEXT_STR_MIN: u8 = 0b0110_0000;
 const IB_ARRAY_MIN: u8 = 0b1000_0000;
 const IB_MAP_MIN: u8 = 0b1010_0000;
 const IB_TAG_MIN: u8 = 0b1100_0000;
-const IB_BOOL_FALSE: u8 = 0b1111_0100;
-const IB_BOOL_TRUE: u8 = 0b1111_0101;
-const IB_NULL: u8 = 0b1111_0110;
+const IB_FP_SIMPLE_MIN: u8 = 0b1100_0000;
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::vec::Vec;

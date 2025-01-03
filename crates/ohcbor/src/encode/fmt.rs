@@ -1,6 +1,9 @@
 use core::fmt;
 
-use crate::encode::{Encoder, Error, Impossible};
+use crate::{
+    encode::{Encoder, Error, Impossible},
+    Simple,
+};
 
 impl Error for fmt::Error {
     fn custom<T: fmt::Display>(_msg: T) -> Self {
@@ -25,7 +28,6 @@ impl Encoder for &mut fmt::Formatter<'_> {
     type EncodeMap = Impossible<(), fmt::Error>;
 
     fmt_primitives! {
-        encode_bool: bool,
         encode_i8: i8,
         encode_i16: i16,
         encode_i32: i32,
@@ -45,15 +47,18 @@ impl Encoder for &mut fmt::Formatter<'_> {
         Err(fmt::Error)
     }
 
-    fn encode_none(self) -> fmt::Result {
-        Err(fmt::Error)
-    }
-
     fn encode_arr(self, _len: Option<usize>) -> Result<Self::EncodeArr, fmt::Error> {
         Err(fmt::Error)
     }
 
     fn encode_map(self, _len: Option<usize>) -> Result<Self::EncodeMap, fmt::Error> {
+        Err(fmt::Error)
+    }
+
+    fn encode_simple<I>(self, _v: I) -> Result<Self::Ok, Self::Error>
+    where
+        I: Into<Simple>,
+    {
         Err(fmt::Error)
     }
 
