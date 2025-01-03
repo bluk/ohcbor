@@ -199,8 +199,8 @@ primitive_deserializer!(u16, "a `u16`.", U16Decoder, visit_u16);
 primitive_deserializer!(u32, "a `u32`.", U32Decoder, visit_u32);
 primitive_deserializer!(u64, "a `u64`.", U64Decoder, visit_u64);
 primitive_deserializer!(u128, "a `u128`.", U128Decoder, visit_u128);
-// TODO: primitive_deserializer!(f32, "an `f32`.", F32Decoder, visit_f32);
-// TODO: primitive_deserializer!(f64, "an `f64`.", F64Decoder, visit_f64);
+primitive_deserializer!(f32, "an `f32`.", F32Decoder, visit_f32);
+primitive_deserializer!(f64, "an `f64`.", F64Decoder, visit_f64);
 
 /// A decoder holding a `bool`.
 pub struct BoolDecoder<E> {

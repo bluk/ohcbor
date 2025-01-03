@@ -178,12 +178,17 @@ macro_rules! num_self {
 
 macro_rules! num_as_self {
     ($ty:ident : $visit:ident) => {
+        #[allow(
+            clippy::cast_precision_loss,
+            clippy::cast_possible_truncation,
+            clippy::cast_lossless
+        )]
         #[inline]
         fn $visit<E>(self, v: $ty) -> Result<Self::Value, E>
         where
             E: Error,
         {
-            Ok(Self::Value::from(v))
+            Ok(v as Self::Value)
         }
     };
 
@@ -206,6 +211,33 @@ macro_rules! num_as_self {
             E: Error,
         {
             Ok(Saturating($primitive::from(v)))
+        }
+    };
+}
+
+macro_rules! num_as_copysign_self {
+    ($ty:ident : $visit:ident) => {
+        #[allow(
+            clippy::cast_precision_loss,
+            clippy::cast_possible_truncation,
+            clippy::cast_lossless
+        )]
+        #[inline]
+        fn $visit<E>(self, v: $ty) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            #[cfg(not(feature = "std"))]
+            {
+                Ok(v as Self::Value)
+            }
+
+            #[cfg(feature = "std")]
+            {
+                // Preserve sign of NaN. The `as` produces a nondeterministic sign.
+                let sign = if v.is_sign_positive() { 1.0 } else { -1.0 };
+                Ok((v as Self::Value).copysign(sign))
+            }
         }
     };
 }
@@ -411,6 +443,22 @@ isize, NonZeroIsize,
 num_as_self!(i8:visit_i8 i16:visit_i16);
 int_to_int!(i32:visit_i32 i64:visit_i64 i128:visit_i128);
 uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
+}
+
+impl_decode_num! {
+    f32,
+    num_self!(f32:visit_f32);
+    num_as_copysign_self!(f64:visit_f64);
+    num_as_self!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64);
+    num_as_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64);
+}
+
+impl_decode_num! {
+    f64,
+    num_self!(f64:visit_f64);
+    num_as_copysign_self!(f32:visit_f32);
+    num_as_self!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64);
+    num_as_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64);
 }
 
 #[cfg(any(feature = "std", feature = "alloc"))]
@@ -721,6 +769,20 @@ where
                     return Ok(None);
                 }
 
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_f32<E>(self, v: f32) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
                 T::decode(v.into_decoder()).map(Some)
             }
         }

@@ -267,16 +267,6 @@ where
     }
 
     #[inline]
-    fn encode_f32(self, _value: f32) -> Result<()> {
-        todo!()
-    }
-
-    #[inline]
-    fn encode_f64(self, _value: f64) -> Result<()> {
-        todo!()
-    }
-
-    #[inline]
     fn encode_str(self, value: &str) -> Result<()> {
         self.write_init_byte_len(IB_TEXT_STR_MIN, value.len())?;
         self.writer.write_all(value.as_bytes())
@@ -321,6 +311,18 @@ where
         } else {
             self.writer.write_all(&[IB_FP_SIMPLE_MIN | 24, v])
         }
+    }
+
+    #[inline]
+    fn encode_f32(self, value: f32) -> Result<()> {
+        self.writer.write_all(&[IB_FP_SIMPLE_MIN | 26])?;
+        self.writer.write_all(&value.to_be_bytes())
+    }
+
+    #[inline]
+    fn encode_f64(self, value: f64) -> Result<()> {
+        self.writer.write_all(&[IB_FP_SIMPLE_MIN | 27])?;
+        self.writer.write_all(&value.to_be_bytes())
     }
 }
 
@@ -572,6 +574,22 @@ mod tests {
         fn test_simple_value_greater_than_31(v in ((32..=u8::MAX).prop_map(Simple::new))) {
             let output = to_vec(&v)?;
             let decoded_v = from_slice::<Simple>(&output)?;
+            assert_eq!(v, decoded_v);
+        }
+
+        #[allow(clippy::float_cmp)]
+        #[test]
+        fn test_f32(v in any::<f32>()) {
+            let output = to_vec(&v)?;
+            let decoded_v = from_slice::<f32>(&output)?;
+            assert_eq!(v, decoded_v);
+        }
+
+        #[allow(clippy::float_cmp)]
+        #[test]
+        fn test_f64(v in any::<f64>()) {
+            let output = to_vec(&v)?;
+            let decoded_v = from_slice::<f64>(&output)?;
             assert_eq!(v, decoded_v);
         }
     }

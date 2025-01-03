@@ -203,12 +203,6 @@ pub trait Encoder: Sized {
     /// Encode a `u128` value.
     fn encode_u128(self, v: u128) -> Result<Self::Ok, Self::Error>;
 
-    /// Encode a `f32` value.
-    fn encode_f32(self, v: f32) -> Result<Self::Ok, Self::Error>;
-
-    /// Encode a `f64` value.
-    fn encode_f64(self, v: f64) -> Result<Self::Ok, Self::Error>;
-
     /// Encode a `&str`.
     fn encode_str(self, v: &str) -> Result<Self::Ok, Self::Error>;
 
@@ -234,6 +228,12 @@ pub trait Encoder: Sized {
     fn encode_simple<I>(self, v: I) -> Result<Self::Ok, Self::Error>
     where
         I: Into<Simple>;
+
+    /// Encode a `f32` value.
+    fn encode_f32(self, v: f32) -> Result<Self::Ok, Self::Error>;
+
+    /// Encode a `f64` value.
+    fn encode_f64(self, v: f64) -> Result<Self::Ok, Self::Error>;
 
     /// Collect an iterator as an array.
     ///

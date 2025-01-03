@@ -209,6 +209,11 @@ pub enum Unexpected<'a> {
 
     /// The input contained a simple value that was not expected
     Simple(Simple),
+
+    /// The input contained a `f32` that was not expected
+    F32(f32),
+    /// The input contained a `f64` that was not expected
+    F64(f64),
 }
 
 macro_rules! unexpected_from {
@@ -251,6 +256,8 @@ impl fmt::Display for Unexpected<'_> {
             Unexpected::Array => write!(f, "array"),
             Unexpected::Map => write!(f, "map"),
             Unexpected::Simple(s) => write!(f, "simple value `{s}`"),
+            Unexpected::F32(n) => write!(f, "float `{n}`"),
+            Unexpected::F64(n) => write!(f, "float `{n}`"),
         }
     }
 }
@@ -750,6 +757,36 @@ pub trait Visitor<'de>: Sized {
         E: Error,
     {
         Err(Error::invalid_type(Unexpected::Simple(v), &self))
+    }
+
+    /// The input contains a `f32`.
+    ///
+    /// The default implementation fails with a type error.
+    ///
+    /// # Errors
+    ///
+    /// Any error encountered during decoding or when creating the `Self::Value`
+    /// type can be returned.
+    fn visit_f32<E>(self, v: f32) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Err(Error::invalid_type(Unexpected::F32(v), &self))
+    }
+
+    /// The input contains a `f64`.
+    ///
+    /// The default implementation fails with a type error.
+    ///
+    /// # Errors
+    ///
+    /// Any error encountered during decoding or when creating the `Self::Value`
+    /// type can be returned.
+    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Err(Error::invalid_type(Unexpected::F64(v), &self))
     }
 }
 

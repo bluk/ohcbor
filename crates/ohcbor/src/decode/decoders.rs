@@ -249,10 +249,28 @@ where
                         todo!()
                     }
                     26 => {
-                        todo!()
+                        let val = f32::from_be_bytes([
+                            self.parse_next()?,
+                            self.parse_next()?,
+                            self.parse_next()?,
+                            self.parse_next()?,
+                        ]);
+
+                        visitor.visit_f32(val)
                     }
                     27 => {
-                        todo!()
+                        let val = f64::from_be_bytes([
+                            self.parse_next()?,
+                            self.parse_next()?,
+                            self.parse_next()?,
+                            self.parse_next()?,
+                            self.parse_next()?,
+                            self.parse_next()?,
+                            self.parse_next()?,
+                            self.parse_next()?,
+                        ]);
+
+                        visitor.visit_f64(val)
                     }
                     28..=31 => Err(Error::malformed(self.read.byte_offset())),
                     _ => {
