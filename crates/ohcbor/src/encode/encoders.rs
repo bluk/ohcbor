@@ -1,8 +1,9 @@
 use crate::{
     encode::{self, Encode},
     error::{Error, Result},
+    tag,
     write::Write,
-    Simple, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN, IB_SINT_MIN,
+    Simple, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN, IB_SINT_MIN, IB_TAG_MIN,
     IB_TEXT_STR_MIN,
 };
 
@@ -298,6 +299,29 @@ where
         Ok(EncodeMap::new(self, len))
     }
 
+    fn encode_tag<T>(self, tag_num: tag::Num, v: &T) -> Result<()>
+    where
+        T: ?Sized + Encode,
+    {
+        if tag_num < 24 {
+            let tag_num = u8::try_from(tag_num).expect("value is greater than 24");
+            self.writer.write_all(&[IB_TAG_MIN | tag_num])?;
+        } else if let Ok(tag_num) = u8::try_from(tag_num) {
+            self.writer.write_all(&[IB_TAG_MIN | 24, tag_num])?;
+        } else if let Ok(tag_num) = u16::try_from(tag_num) {
+            self.writer.write_all(&[IB_TAG_MIN | 25])?;
+            self.writer.write_all(&tag_num.to_be_bytes())?;
+        } else if let Ok(tag_num) = u32::try_from(tag_num) {
+            self.writer.write_all(&[IB_TAG_MIN | 26])?;
+            self.writer.write_all(&tag_num.to_be_bytes())?;
+        } else {
+            self.writer.write_all(&[IB_TAG_MIN | 27])?;
+            self.writer.write_all(&tag_num.to_be_bytes())?;
+        }
+
+        v.encode(self)
+    }
+
     #[inline]
     fn encode_simple<I>(self, v: I) -> Result<()>
     where
@@ -451,7 +475,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{from_slice, Simple};
+    use crate::{from_slice, tag, Simple, Tag};
 
     #[cfg(all(feature = "alloc", not(feature = "std")))]
     use alloc::{collections::BTreeMap, string::String, vec::Vec};
@@ -462,6 +486,12 @@ mod tests {
     use crate::{to_vec, ByteString};
 
     use proptest::prelude::*;
+
+    prop_compose! {
+        fn tag()(num in any::<tag::Num>(), content in any::<u64>()) -> Tag<u64> {
+            Tag::new(num, content)
+        }
+    }
 
     proptest::proptest! {
         #[test]
@@ -560,6 +590,13 @@ mod tests {
         fn test_map(v in prop::collection::btree_map(".*", ".*", 0..256)) {
             let output = to_vec(&v)?;
             let decoded_v = from_slice::<BTreeMap<String, String>>(&output)?;
+            assert_eq!(v, decoded_v);
+        }
+
+        #[test]
+        fn test_tag(v in tag()) {
+            let output = to_vec(&v)?;
+            let decoded_v = from_slice::<Tag<u64>>(&output)?;
             assert_eq!(v, decoded_v);
         }
 

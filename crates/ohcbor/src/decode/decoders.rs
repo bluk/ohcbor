@@ -233,6 +233,45 @@ where
                     count: 0,
                 })
             }
+            IB_TAG_MIN..IB_FP_SIMPLE_MIN => {
+                let arg_val = init_byte & 0b0001_1111;
+                let tag_num = match arg_val {
+                    0..24 => u64::from(arg_val),
+                    24 => {
+                        let val = self.parse_next()?;
+                        u64::from(val)
+                    }
+                    25 => {
+                        let val = u16::from_be_bytes([self.parse_next()?, self.parse_next()?]);
+                        u64::from(val)
+                    }
+                    26 => {
+                        let val = u32::from_be_bytes([
+                            self.parse_next()?,
+                            self.parse_next()?,
+                            self.parse_next()?,
+                            self.parse_next()?,
+                        ]);
+                        u64::from(val)
+                    }
+                    27 => u64::from_be_bytes([
+                        self.parse_next()?,
+                        self.parse_next()?,
+                        self.parse_next()?,
+                        self.parse_next()?,
+                        self.parse_next()?,
+                        self.parse_next()?,
+                        self.parse_next()?,
+                        self.parse_next()?,
+                    ]),
+                    28..=31 => return Err(Error::malformed(self.read.byte_offset())),
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
+                visitor.visit_tag(tag_num, self)
+            }
             IB_FP_SIMPLE_MIN..=0xff => {
                 let arg_val = init_byte & 0b0001_1111;
                 match arg_val {

@@ -99,7 +99,7 @@ use alloc::string::ToString;
 #[cfg(feature = "std")]
 use std::string::ToString;
 
-use crate::{error::ErrorKind, Simple};
+use crate::{error::ErrorKind, tag, Simple};
 
 #[cfg(any(feature = "alloc", feature = "std"))]
 pub(crate) mod decoders;
@@ -202,10 +202,13 @@ pub enum Unexpected<'a> {
     /// The input contained a byte string that was not expected.
     Bytes(&'a [u8]),
 
-    /// The input contained  an array that was not expected.
+    /// The input contained an array that was not expected.
     Array,
-    /// The input contained  a map that was not expected.
+    /// The input contained a map that was not expected.
     Map,
+
+    /// The input contained a tag that was not expected.
+    Tag(tag::Num),
 
     /// The input contained a simple value that was not expected
     Simple(Simple),
@@ -255,6 +258,7 @@ impl fmt::Display for Unexpected<'_> {
             Unexpected::Bytes(_) => write!(f, "bytes array"),
             Unexpected::Array => write!(f, "array"),
             Unexpected::Map => write!(f, "map"),
+            Unexpected::Tag(t) => write!(f, "tag `{t}`"),
             Unexpected::Simple(s) => write!(f, "simple value `{s}`"),
             Unexpected::F32(n) => write!(f, "float `{n}`"),
             Unexpected::F64(n) => write!(f, "float `{n}`"),
@@ -742,6 +746,21 @@ pub trait Visitor<'de>: Sized {
         A: MapAccess<'de>,
     {
         Err(Error::invalid_type(Unexpected::Map, &self))
+    }
+
+    /// The input contains a tagged value.
+    ///
+    /// The default implementation fails with a type error.
+    ///
+    /// # Errors
+    ///
+    /// Any error encountered during decoding or when creating the `Self::Value`
+    /// type can be returned.
+    fn visit_tag<D>(self, tag_num: tag::Num, _decoder: D) -> Result<Self::Value, D::Error>
+    where
+        D: Decoder<'de>,
+    {
+        Err(Error::invalid_type(Unexpected::Tag(tag_num), &self))
     }
 
     /// The input contains a simple value.

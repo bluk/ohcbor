@@ -1339,3 +1339,50 @@ impl<E> fmt::Debug for SimpleDecoder<E> {
             .finish()
     }
 }
+
+/// A decoder holding a tag number.
+pub struct TagDecoder<D> {
+    tag_num: u64,
+    decoder: D,
+}
+
+impl<D> TagDecoder<D> {
+    #[expect(missing_docs)]
+    #[must_use]
+    pub fn new(tag_num: u64, decoder: D) -> Self {
+        Self { tag_num, decoder }
+    }
+}
+
+impl<'de, D> Decoder<'de> for TagDecoder<D>
+where
+    D: Decoder<'de>,
+{
+    type Error = D::Error;
+
+    fn decode_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_tag(self.tag_num, self.decoder)
+    }
+}
+
+impl<'de, D> IntoDecoder<'de, D::Error> for TagDecoder<D>
+where
+    D: Decoder<'de>,
+{
+    type Decoder = Self;
+
+    fn into_decoder(self) -> Self {
+        self
+    }
+}
+
+impl<E> fmt::Debug for TagDecoder<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TagDecoder")
+            .field("tag_num", &self.tag_num)
+            .finish()
+    }
+}

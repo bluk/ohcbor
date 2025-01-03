@@ -30,7 +30,10 @@ use crate::decode::{size_hint, MapAccess};
 use crate::{
     decode::{
         seed::InPlaceSeed,
-        value::{ArrAccessDecoder, BorrowedBytesDecoder, BorrowedStrDecoder, MapAccessDecoder},
+        value::{
+            ArrAccessDecoder, BorrowedBytesDecoder, BorrowedStrDecoder, MapAccessDecoder,
+            TagDecoder,
+        },
         ArrAccess, Decode, Decoder, Error, IntoDecoder, Unexpected, Visitor,
     },
     Simple,
@@ -759,6 +762,13 @@ where
                 A: MapAccess<'a>,
             {
                 T::decode(MapAccessDecoder::new(map)).map(Some)
+            }
+
+            fn visit_tag<D>(self, tag_num: u64, decoder: D) -> Result<Self::Value, D::Error>
+            where
+                D: Decoder<'a>,
+            {
+                T::decode(TagDecoder::new(tag_num, decoder)).map(Some)
             }
 
             fn visit_simple<E>(self, v: Simple) -> Result<Self::Value, E>

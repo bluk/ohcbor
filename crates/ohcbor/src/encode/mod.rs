@@ -224,6 +224,11 @@ pub trait Encoder: Sized {
     /// be computable before the map is iterated.
     fn encode_map(self, len: Option<usize>) -> Result<Self::EncodeMap, Self::Error>;
 
+    /// Encode a tag.
+    fn encode_tag<T>(self, tag_num: u64, v: &T) -> Result<Self::Ok, Self::Error>
+    where
+        T: ?Sized + Encode;
+
     /// Encode a simple value.
     fn encode_simple<I>(self, v: I) -> Result<Self::Ok, Self::Error>
     where

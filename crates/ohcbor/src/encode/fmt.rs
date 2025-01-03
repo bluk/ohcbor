@@ -55,6 +55,13 @@ impl Encoder for &mut fmt::Formatter<'_> {
         Err(fmt::Error)
     }
 
+    fn encode_tag<T>(self, _tag_num: u64, _v: &T) -> Result<Self::Ok, Self::Error>
+    where
+        T: ?Sized + super::Encode,
+    {
+        Err(fmt::Error)
+    }
+
     fn encode_simple<I>(self, _v: I) -> Result<Self::Ok, Self::Error>
     where
         I: Into<Simple>,
