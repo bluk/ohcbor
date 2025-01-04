@@ -367,7 +367,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{from_slice, Result};
+    use crate::{from_slice, Result, Simple, Tag};
 
     #[cfg(feature = "std")]
     use crate::from_reader;
@@ -608,14 +608,29 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_18_446_744_073_709_551_616() -> Result<()> {
+        let input = hex!("c2 49 01 00 00 00 00 00 00 00 00");
+        let expected: &[u8] = &[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        assert_eq!(from_slice::<Tag<&[u8]>>(&input)?, Tag::new(2, expected),);
+        Ok(())
+    }
+
+    #[test]
     fn test_decode_neg_18_446_744_073_709_551_616() -> Result<()> {
         let input = hex!("3b ff ff ff ff ff ff ff ff");
-        // assert_decode_i128_val!(-18_446_744_073_709_551_616, input);
         assert_eq!(
             -18_446_744_073_709_551_616,
             from_slice::<i128>(&input)?,
             "decoding i128 {input:X?}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_neg_18_446_744_073_709_551_617() -> Result<()> {
+        let input = hex!("c3 49 01 00 00 00 00 00 00 00 00");
+        let expected: &[u8] = &[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        assert_eq!(from_slice::<Tag<&[u8]>>(&input)?, Tag::new(3, expected),);
         Ok(())
     }
 
@@ -644,6 +659,105 @@ mod tests {
     fn test_decode_neg_1000() -> Result<()> {
         let input = hex!("39 03 e7");
         assert_decode_i16_val!(-1000, input);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_bool_false() -> Result<()> {
+        let input = hex!("f4");
+        assert!(!from_slice::<bool>(&input)?);
+        assert_eq!(from_slice::<Simple>(&input)?, Simple::new(20));
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_bool_true() -> Result<()> {
+        let input = hex!("f5");
+        assert!(from_slice::<bool>(&input)?);
+        assert_eq!(from_slice::<Simple>(&input)?, Simple::new(21));
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_null() -> Result<()> {
+        let input = hex!("f6");
+        assert_eq!(from_slice::<Option<i8>>(&input)?, None);
+        assert_eq!(from_slice::<Simple>(&input)?, Simple::new(22));
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_undefined() -> Result<()> {
+        let input = hex!("f7");
+        assert_eq!(from_slice::<Simple>(&input)?, Simple::new(23));
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_simple_16() -> Result<()> {
+        let input = hex!("f0");
+        assert_eq!(from_slice::<Simple>(&input)?, Simple::new(16));
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_simple_255() -> Result<()> {
+        let input = hex!("f8 ff");
+        assert_eq!(from_slice::<Simple>(&input)?, Simple::new(255));
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_tag_date() -> Result<()> {
+        let input = hex!("c0 74 32 30 31 33 2d 30 33 2d 32 31 54 32 30 3a 30 34 3a 30 30 5a");
+        assert_eq!(
+            from_slice::<Tag<&str>>(&input)?,
+            Tag::new(0, "2013-03-21T20:04:00Z")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_tag_epoch_time_int() -> Result<()> {
+        let input = hex!("c1 1a 51 4b 67 b0");
+        assert_eq!(from_slice::<Tag<u32>>(&input)?, Tag::new(1, 1_363_896_240));
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_tag_epoch_time_fp() -> Result<()> {
+        let input = hex!("c1 fb 41 d4 52 d9 ec 20 00 00");
+        assert_eq!(
+            from_slice::<Tag<f32>>(&input)?,
+            Tag::new(1, 1_363_896_240.5)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_tag_base16() -> Result<()> {
+        let input = hex!("d7 44 01 02 03 04");
+        let expected: &[u8] = &[0x01, 0x02, 0x03, 0x04];
+        assert_eq!(from_slice::<Tag<&[u8]>>(&input)?, Tag::new(23, expected));
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_tag_encoded_cbor() -> Result<()> {
+        let input = hex!("d8 18 45 64 49 45 54 46");
+        let expected: &[u8] = &[0x64, 0x49, 0x45, 0x54, 0x46];
+        assert_eq!(from_slice::<Tag<&[u8]>>(&input)?, Tag::new(24, expected));
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_tag_uri() -> Result<()> {
+        let input =
+            hex!("d8 20 76 68 74 74 70 3a 2f 2f 77 77 77 2e 65 78 61 6d 70 6c 65 2e 63 6f 6d");
+        assert_eq!(
+            from_slice::<Tag<&str>>(&input)?,
+            Tag::new(32, "http://www.example.com")
+        );
         Ok(())
     }
 
@@ -808,34 +922,6 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_bool_false() -> Result<()> {
-        let input = hex!("f4");
-        assert!(!from_slice::<bool>(&input)?);
-        Ok(())
-    }
-
-    #[test]
-    fn test_decode_bool_true() -> Result<()> {
-        let input = hex!("f5");
-        assert!(from_slice::<bool>(&input)?);
-        Ok(())
-    }
-
-    #[test]
-    fn test_decode_null() -> Result<()> {
-        let input = hex!("f6");
-        assert_eq!(from_slice::<Option<i8>>(&input)?, None);
-        Ok(())
-    }
-
-    #[test]
-    fn test_decode_option() -> Result<()> {
-        let input = hex!("f5");
-        assert_eq!(from_slice::<Option<bool>>(&input)?, Some(true));
-        Ok(())
-    }
-
-    #[test]
     fn test_decode_empty_arr() -> Result<()> {
         let input = hex!("80");
         assert_eq!(from_slice::<Vec<u8>>(&input)?, &[]);
@@ -885,6 +971,13 @@ mod tests {
         let input = hex!("a2 01 02 03 04");
         let expected = BTreeMap::from([(1, 2), (3, 4)]);
         assert_eq!(from_slice::<BTreeMap<u8, u8>>(&input)?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_option() -> Result<()> {
+        let input = hex!("f5");
+        assert_eq!(from_slice::<Option<bool>>(&input)?, Some(true));
         Ok(())
     }
 }
