@@ -3,8 +3,8 @@ use crate::{
     decode::{ArrAccess, DecodeSeed, Decoder, Error, MapAccess, Visitor},
     error::ErrorKind,
     read::{Read, Ref},
-    Simple, ADDTL_INFO_MASK, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN,
-    IB_NEG_INT_MIN, IB_TAG_MIN, IB_TEXT_STR_MIN, IB_UINT_MIN,
+    Simple, ADDTL_INFO_MASK, BREAK_CODE, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN,
+    IB_MAP_MIN, IB_NEG_INT_MIN, IB_TAG_MIN, IB_TEXT_STR_MIN, IB_UINT_MIN,
 };
 
 pub(crate) struct DecoderImpl<R, B> {
@@ -41,6 +41,37 @@ where
             ))),
             None => Ok(()),
         }
+    }
+
+    fn on_end_arr(&mut self, remaining: Option<usize>) -> Result<(), crate::Error> {
+        if let Some(remaining) = remaining {
+            if 0 < remaining {
+                Err(crate::Error::new(
+                    ErrorKind::TrailingData,
+                    self.read.byte_offset(),
+                ))
+            } else {
+                Ok(())
+            }
+        } else {
+            match self.parse_peek()? {
+                BREAK_CODE => {
+                    self.parse_next()?;
+                    Ok(())
+                }
+                _ => Err(crate::Error::new(
+                    ErrorKind::TrailingData,
+                    self.read.byte_offset(),
+                )),
+            }
+        }
+    }
+
+    #[inline]
+    fn parse_peek(&mut self) -> Result<u8, crate::Error> {
+        self.read.peek().ok_or_else(|| {
+            crate::Error::new(ErrorKind::EofWhileParsingValue, self.read.byte_offset())
+        })?
     }
 
     #[inline]
@@ -188,13 +219,17 @@ where
                 }
             }
             IB_ARRAY_MIN..IB_MAP_MIN => {
-                let len = self.read.parse_len(init_byte)?;
+                let mut remaining = self.read.parse_len(init_byte)?;
 
-                visitor.visit_arr(ArrAccessImpl {
+                let ret = visitor.visit_arr(ArrAccessImpl {
                     de: self,
-                    len,
-                    count: 0,
-                })
+                    remaining: &mut remaining,
+                });
+
+                match (ret, self.on_end_arr(remaining)) {
+                    (Ok(ret), Ok(())) => Ok(ret),
+                    (Err(err), _) | (_, Err(err)) => Err(err),
+                }
             }
             IB_MAP_MIN..IB_TAG_MIN => {
                 let len = self.read.parse_len(init_byte)?;
@@ -265,10 +300,8 @@ where
 
 struct ArrAccessImpl<'a, R, B> {
     de: &'a mut DecoderImpl<R, B>,
-    /// Expected number of items. If `None`, the list has an indefinite length
-    len: Option<usize>,
-    /// Number of elements already decoded
-    count: usize,
+    /// Expected number of items remaining. If `None`, the list has an indefinite length
+    remaining: &'a mut Option<usize>,
 }
 
 impl<'de, 'a, R: Read<'de> + 'a, B> ArrAccess<'de> for ArrAccessImpl<'a, R, B>
@@ -281,23 +314,21 @@ where
     where
         T: DecodeSeed<'de>,
     {
-        if let Some(len) = self.len {
-            if len == self.count {
+        if let Some(remaining) = &mut self.remaining {
+            if *remaining == 0 {
                 return Ok(None);
             }
-            self.count += 1;
-        } else {
-            // Indefinite length
-            todo!()
+            *remaining -= 1;
+        } else if let Ok(BREAK_CODE) = self.de.parse_peek() {
+            return Ok(None);
         }
 
         Ok(Some(seed.decode(&mut *self.de)?))
     }
 
-    /// Returns the number of elements remaining in the sequence, if known.
     #[inline]
     fn size_hint(&self) -> Option<usize> {
-        self.len
+        *self.remaining
     }
 }
 
@@ -971,6 +1002,58 @@ mod tests {
         let input = hex!("a2 01 02 03 04");
         let expected = BTreeMap::from([(1, 2), (3, 4)]);
         assert_eq!(from_slice::<BTreeMap<u8, u8>>(&input)?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_indefinite_empty_arr() -> Result<()> {
+        let input = hex!("9f ff");
+        assert_eq!(from_slice::<Vec<u8>>(&input)?, &[]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_indefinite_nested_indefinite_arr() -> Result<()> {
+        let input = hex!("9f 01 82 02 03 9f 04 05 ff ff");
+        let expected: (u8, Vec<u8>, Vec<u8>) = (1, vec![2, 3], vec![4, 5]);
+        assert_eq!(expected, from_slice(&input)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_indefinite_nested_arr() -> Result<()> {
+        let input = hex!("9f 01 82 02 03 82 04 05 ff");
+        let expected: (u8, Vec<u8>, Vec<u8>) = (1, vec![2, 3], vec![4, 5]);
+        assert_eq!(expected, from_slice(&input)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_nested_indefinite_arr() -> Result<()> {
+        let input = hex!("83 01 82 02 03 9f 04 05 ff");
+        let expected: (u8, Vec<u8>, Vec<u8>) = (1, vec![2, 3], vec![4, 5]);
+        assert_eq!(expected, from_slice(&input)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_nested_indefinite_arr_2() -> Result<()> {
+        let input = hex!("83 01 9f 02 03 ff 82 04 05");
+        let expected: (u8, Vec<u8>, Vec<u8>) = (1, vec![2, 3], vec![4, 5]);
+        assert_eq!(expected, from_slice(&input)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_indefinite() -> Result<()> {
+        let input = hex!("9f 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 18 18 19 ff");
+        assert_eq!(
+            from_slice::<Vec<u8>>(&input)?,
+            &[
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                24, 25
+            ]
+        );
         Ok(())
     }
 

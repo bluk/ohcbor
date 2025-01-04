@@ -3,8 +3,8 @@ use crate::{
     error::{Error, Result},
     tag,
     write::Write,
-    Simple, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN, IB_NEG_INT_MIN,
-    IB_TAG_MIN, IB_TEXT_STR_MIN,
+    ErrorKind, Simple, BREAK_CODE, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN,
+    IB_NEG_INT_MIN, IB_TAG_MIN, IB_TEXT_STR_MIN,
 };
 
 /// A CBOR Encoder for types which implement [`Encode`].
@@ -380,24 +380,26 @@ where
     where
         T: ?Sized + Encode,
     {
-        if let Some(rem) = self.remaining {
-            self.remaining = Some(rem - 1);
+        if let Some(rem) = &mut self.remaining {
+            if *rem == 0 {
+                return Err(Error::new(ErrorKind::NotWellFormed, 0));
+            }
+            *rem -= 1;
         }
         value.encode(&mut *self.enc)
     }
 
     #[inline]
     fn end(self) -> Result<()> {
-        if let Some(remaining) = self.remaining {
-            if 0 < remaining {
-                todo!()
+        if let Some(rem) = &self.remaining {
+            if 0 < *rem {
+                Err(Error::new(ErrorKind::NotWellFormed, 0))
+            } else {
+                Ok(())
             }
         } else {
-            todo!()
-            // End with marker
+            self.enc.writer.write_all(&[BREAK_CODE])
         }
-
-        Ok(())
     }
 }
 
