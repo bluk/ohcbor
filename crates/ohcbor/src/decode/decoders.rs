@@ -3,8 +3,8 @@ use crate::{
     decode::{ArrAccess, DecodeSeed, Decoder, Error, MapAccess, Visitor},
     error::ErrorKind,
     read::{Read, Ref},
-    Simple, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN, IB_SINT_MIN, IB_TAG_MIN,
-    IB_TEXT_STR_MIN, IB_UINT_MIN,
+    Simple, ADDTL_INFO_MASK, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN,
+    IB_NEG_INT_MIN, IB_TAG_MIN, IB_TEXT_STR_MIN, IB_UINT_MIN,
 };
 
 pub(crate) struct DecoderImpl<R, B> {
@@ -69,38 +69,24 @@ where
         let init_byte = self.parse_next()?;
 
         match init_byte {
-            IB_UINT_MIN..IB_SINT_MIN => {
-                let arg_val = init_byte & 0b0001_1111;
-                match arg_val {
-                    0..24 => visitor.visit_u8(arg_val),
+            IB_UINT_MIN..IB_NEG_INT_MIN => {
+                let addtl_info = init_byte & ADDTL_INFO_MASK;
+                match addtl_info {
+                    0..24 => visitor.visit_u8(addtl_info),
                     24 => {
                         let val = self.parse_next()?;
                         visitor.visit_u8(val)
                     }
                     25 => {
-                        let val = u16::from_be_bytes([self.parse_next()?, self.parse_next()?]);
+                        let val = self.read.parse_u16()?;
                         visitor.visit_u16(val)
                     }
                     26 => {
-                        let val = u32::from_be_bytes([
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                        ]);
+                        let val = self.read.parse_u32()?;
                         visitor.visit_u32(val)
                     }
                     27 => {
-                        let val = u64::from_be_bytes([
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                        ]);
+                        let val = self.read.parse_u64()?;
                         visitor.visit_u64(val)
                     }
                     28..=31 => Err(Error::malformed(self.read.byte_offset())),
@@ -109,12 +95,12 @@ where
                     }
                 }
             }
-            IB_SINT_MIN..IB_BYTE_STR_MIN => {
-                let arg_val = init_byte & 0b0001_1111;
-                match arg_val {
+            IB_NEG_INT_MIN..IB_BYTE_STR_MIN => {
+                let addtl_info = init_byte & ADDTL_INFO_MASK;
+                match addtl_info {
                     0..24 => {
                         let arg_val =
-                            i8::try_from(arg_val).expect("argument should be less than 24");
+                            i8::try_from(addtl_info).expect("argument should be less than 24");
                         visitor.visit_i8(-1 - arg_val)
                     }
                     24 => {
@@ -130,7 +116,7 @@ where
                         }
                     }
                     25 => {
-                        let val = u16::from_be_bytes([self.parse_next()?, self.parse_next()?]);
+                        let val = self.read.parse_u16()?;
 
                         if let Some(val) = i16::try_from(val)
                             .ok()
@@ -142,12 +128,7 @@ where
                         }
                     }
                     26 => {
-                        let val = u32::from_be_bytes([
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                        ]);
+                        let val = self.read.parse_u32()?;
 
                         if let Some(val) = i32::try_from(val)
                             .ok()
@@ -159,16 +140,7 @@ where
                         }
                     }
                     27 => {
-                        let val = u64::from_be_bytes([
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                        ]);
+                        let val = self.read.parse_u64()?;
 
                         if let Some(val) = i64::try_from(val)
                             .ok()
@@ -234,7 +206,7 @@ where
                 })
             }
             IB_TAG_MIN..IB_FP_SIMPLE_MIN => {
-                let arg_val = init_byte & 0b0001_1111;
+                let arg_val = init_byte & ADDTL_INFO_MASK;
                 let tag_num = match arg_val {
                     0..24 => u64::from(arg_val),
                     24 => {
@@ -242,28 +214,14 @@ where
                         u64::from(val)
                     }
                     25 => {
-                        let val = u16::from_be_bytes([self.parse_next()?, self.parse_next()?]);
+                        let val = self.read.parse_u16()?;
                         u64::from(val)
                     }
                     26 => {
-                        let val = u32::from_be_bytes([
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                        ]);
+                        let val = self.read.parse_u32()?;
                         u64::from(val)
                     }
-                    27 => u64::from_be_bytes([
-                        self.parse_next()?,
-                        self.parse_next()?,
-                        self.parse_next()?,
-                        self.parse_next()?,
-                        self.parse_next()?,
-                        self.parse_next()?,
-                        self.parse_next()?,
-                        self.parse_next()?,
-                    ]),
+                    27 => self.read.parse_u64()?,
                     28..=31 => return Err(Error::malformed(self.read.byte_offset())),
                     _ => {
                         unreachable!()
@@ -273,7 +231,7 @@ where
                 visitor.visit_tag(tag_num, self)
             }
             IB_FP_SIMPLE_MIN..=0xff => {
-                let arg_val = init_byte & 0b0001_1111;
+                let arg_val = init_byte & ADDTL_INFO_MASK;
                 match arg_val {
                     0..24 => visitor.visit_simple(Simple::from(arg_val)),
                     24 => {
@@ -288,27 +246,11 @@ where
                         todo!()
                     }
                     26 => {
-                        let val = f32::from_be_bytes([
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                        ]);
-
+                        let val = f32::from_be_bytes(self.read.read_arr()?);
                         visitor.visit_f32(val)
                     }
                     27 => {
-                        let val = f64::from_be_bytes([
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                            self.parse_next()?,
-                        ]);
-
+                        let val = f64::from_be_bytes(self.read.read_arr()?);
                         visitor.visit_f64(val)
                     }
                     28..=31 => Err(Error::malformed(self.read.byte_offset())),

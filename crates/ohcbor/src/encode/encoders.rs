@@ -3,8 +3,8 @@ use crate::{
     error::{Error, Result},
     tag,
     write::Write,
-    Simple, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN, IB_SINT_MIN, IB_TAG_MIN,
-    IB_TEXT_STR_MIN,
+    Simple, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN, IB_NEG_INT_MIN,
+    IB_TAG_MIN, IB_TEXT_STR_MIN,
 };
 
 /// A CBOR Encoder for types which implement [`Encode`].
@@ -82,10 +82,10 @@ where
 
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
-            self.writer.write_all(&[IB_SINT_MIN | value])
+            self.writer.write_all(&[IB_NEG_INT_MIN | value])
         } else {
             let value = u8::try_from(value).expect("value is greater than u8::MAX");
-            self.writer.write_all(&[IB_SINT_MIN | 24, value])
+            self.writer.write_all(&[IB_NEG_INT_MIN | 24, value])
         }
     }
 
@@ -100,12 +100,12 @@ where
 
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
-            self.writer.write_all(&[IB_SINT_MIN | value])
+            self.writer.write_all(&[IB_NEG_INT_MIN | value])
         } else if let Ok(value) = u8::try_from(value) {
-            self.writer.write_all(&[IB_SINT_MIN | 24, value])
+            self.writer.write_all(&[IB_NEG_INT_MIN | 24, value])
         } else {
             let value = u16::try_from(value).expect("value is greater than u16::MAX");
-            self.writer.write_all(&[IB_SINT_MIN | 25])?;
+            self.writer.write_all(&[IB_NEG_INT_MIN | 25])?;
             self.writer.write_all(&value.to_be_bytes())
         }
     }
@@ -121,15 +121,15 @@ where
 
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
-            self.writer.write_all(&[IB_SINT_MIN | value])
+            self.writer.write_all(&[IB_NEG_INT_MIN | value])
         } else if let Ok(value) = u8::try_from(value) {
-            self.writer.write_all(&[IB_SINT_MIN | 24, value])
+            self.writer.write_all(&[IB_NEG_INT_MIN | 24, value])
         } else if let Ok(value) = u16::try_from(value) {
-            self.writer.write_all(&[IB_SINT_MIN | 25])?;
+            self.writer.write_all(&[IB_NEG_INT_MIN | 25])?;
             self.writer.write_all(&value.to_be_bytes())
         } else {
             let value = u32::try_from(value).expect("value is greater than u32::MAX");
-            self.writer.write_all(&[IB_SINT_MIN | 26])?;
+            self.writer.write_all(&[IB_NEG_INT_MIN | 26])?;
             self.writer.write_all(&value.to_be_bytes())
         }
     }
@@ -145,18 +145,18 @@ where
 
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
-            self.writer.write_all(&[IB_SINT_MIN | value])
+            self.writer.write_all(&[IB_NEG_INT_MIN | value])
         } else if let Ok(value) = u8::try_from(value) {
-            self.writer.write_all(&[IB_SINT_MIN | 24, value])
+            self.writer.write_all(&[IB_NEG_INT_MIN | 24, value])
         } else if let Ok(value) = u16::try_from(value) {
-            self.writer.write_all(&[IB_SINT_MIN | 25])?;
+            self.writer.write_all(&[IB_NEG_INT_MIN | 25])?;
             self.writer.write_all(&value.to_be_bytes())
         } else if let Ok(value) = u32::try_from(value) {
-            self.writer.write_all(&[IB_SINT_MIN | 26])?;
+            self.writer.write_all(&[IB_NEG_INT_MIN | 26])?;
             self.writer.write_all(&value.to_be_bytes())
         } else {
             let value = u64::try_from(value).expect("value is greater than u64::MAX");
-            self.writer.write_all(&[IB_SINT_MIN | 27])?;
+            self.writer.write_all(&[IB_NEG_INT_MIN | 27])?;
             self.writer.write_all(&value.to_be_bytes())
         }
     }
@@ -172,17 +172,17 @@ where
 
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
-            self.writer.write_all(&[IB_SINT_MIN | value])
+            self.writer.write_all(&[IB_NEG_INT_MIN | value])
         } else if let Ok(value) = u8::try_from(value) {
-            self.writer.write_all(&[IB_SINT_MIN | 24, value])
+            self.writer.write_all(&[IB_NEG_INT_MIN | 24, value])
         } else if let Ok(value) = u16::try_from(value) {
-            self.writer.write_all(&[IB_SINT_MIN | 25])?;
+            self.writer.write_all(&[IB_NEG_INT_MIN | 25])?;
             self.writer.write_all(&value.to_be_bytes())
         } else if let Ok(value) = u32::try_from(value) {
-            self.writer.write_all(&[IB_SINT_MIN | 26])?;
+            self.writer.write_all(&[IB_NEG_INT_MIN | 26])?;
             self.writer.write_all(&value.to_be_bytes())
         } else if let Ok(value) = u64::try_from(value) {
-            self.writer.write_all(&[IB_SINT_MIN | 27])?;
+            self.writer.write_all(&[IB_NEG_INT_MIN | 27])?;
             self.writer.write_all(&value.to_be_bytes())
         } else {
             todo!()

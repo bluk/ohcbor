@@ -94,13 +94,16 @@ pub use simple::Simple;
 pub use tag::Tag;
 
 const IB_UINT_MIN: u8 = 0b0000_0000;
-const IB_SINT_MIN: u8 = 0b0010_0000;
+const IB_NEG_INT_MIN: u8 = 0b0010_0000;
 const IB_BYTE_STR_MIN: u8 = 0b0100_0000;
 const IB_TEXT_STR_MIN: u8 = 0b0110_0000;
 const IB_ARRAY_MIN: u8 = 0b1000_0000;
 const IB_MAP_MIN: u8 = 0b1010_0000;
 const IB_TAG_MIN: u8 = 0b1100_0000;
 const IB_FP_SIMPLE_MIN: u8 = 0b1110_0000;
+
+/// Additional information mask (lower 5 bits)
+const ADDTL_INFO_MASK: u8 = 0b0001_1111;
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::vec::Vec;
