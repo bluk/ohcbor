@@ -17,7 +17,7 @@ pub const SIMPLE_VALUE_NULL: u8 = 22;
 pub const SIMPLE_VALUE_UNDEFINED: u8 = 23;
 
 /// Simple value
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Simple(pub u8);
 
 impl Simple {

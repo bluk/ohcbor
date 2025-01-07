@@ -398,7 +398,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{from_slice, Result, Simple, Tag};
+    use crate::{from_slice, value::Value, Result, Simple, Tag};
 
     #[cfg(feature = "std")]
     use crate::from_reader;
@@ -975,6 +975,18 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_nested_arr_value() -> Result<()> {
+        let input = hex!("83 01 82 02 03 82 04 05");
+        let expected: Value = Value::Array(vec![
+            1.into(),
+            Value::Array(vec![2.into(), 3.into()]),
+            Value::Array(vec![4.into(), 5.into()]),
+        ]);
+        assert_eq!(expected, from_slice(&input)?);
+        Ok(())
+    }
+
+    #[test]
     fn test_decode_arr_len_greater_than_24() -> Result<()> {
         let input = hex!("98 19 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 18 18 19");
         assert_eq!(
@@ -1002,6 +1014,46 @@ mod tests {
         let input = hex!("a2 01 02 03 04");
         let expected = BTreeMap::from([(1, 2), (3, 4)]);
         assert_eq!(from_slice::<BTreeMap<u8, u8>>(&input)?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_map_value() -> Result<()> {
+        let input = hex!("a2 61 61 01 61 62 82 02 03");
+        let m: BTreeMap<Value, Value> = [
+            ("a".into(), 1.into()),
+            ("b".into(), Value::Array(vec![2.into(), 3.into()])),
+        ]
+        .into_iter()
+        .collect();
+        let expected: Value = Value::Map(m);
+        assert_eq!(from_slice::<Value>(&input)?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_arr_value() -> Result<()> {
+        let input = hex!("82 61 61 a1 61 62 61 63");
+        let m: BTreeMap<Value, Value> = [("b".into(), "c".into())].into_iter().collect();
+        let expected: Value = Value::Array(vec!["a".into(), Value::Map(m)]);
+        assert_eq!(from_slice::<Value>(&input)?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_map_value_letters() -> Result<()> {
+        let input = hex!("a5 61 61 61 41 61 62 61 42 61 63 61 43 61 64 61 44 61 65 61 45");
+        let m: BTreeMap<Value, Value> = [
+            ("a".into(), "A".into()),
+            ("b".into(), "B".into()),
+            ("c".into(), "C".into()),
+            ("d".into(), "D".into()),
+            ("e".into(), "E".into()),
+        ]
+        .into_iter()
+        .collect();
+        let expected: Value = Value::Map(m);
+        assert_eq!(from_slice::<Value>(&input)?, expected);
         Ok(())
     }
 

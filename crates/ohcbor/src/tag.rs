@@ -11,10 +11,10 @@ use crate::{
 pub type Num = u64;
 
 /// Tag number and content.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tag<T> {
-    num: Num,
-    content: T,
+    pub(crate) num: Num,
+    pub(crate) content: T,
 }
 
 impl<T> Tag<T> {

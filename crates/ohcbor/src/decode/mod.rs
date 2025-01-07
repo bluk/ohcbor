@@ -376,6 +376,12 @@ pub trait Decode<'de>: Sized {
     }
 }
 
+/// A data structure that can be decoded without borrowing any data from
+/// the decoder.
+#[allow(clippy::module_name_repetitions)]
+pub trait DecodeOwned: for<'de> Decode<'de> {}
+impl<T> DecodeOwned for T where T: for<'de> Decode<'de> {}
+
 /// `DecodeSeed` is the stateful form of the `Decode` trait. If you
 /// ever find yourself looking for a way to pass data into a `Decode` impl,
 /// this trait is the way to do it.
