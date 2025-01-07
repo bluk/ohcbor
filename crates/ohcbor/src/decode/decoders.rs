@@ -278,7 +278,11 @@ where
                         }
                     }
                     25 => {
-                        todo!()
+                        // Should add a "f16" feature to add "visit_f16" method
+                        // to Visitor and to implement f16 support for
+                        // Decode/Encode.
+                        let val = half::f16::from_be_bytes(self.read.read_arr()?);
+                        visitor.visit_f32(f32::from(val))
                     }
                     26 => {
                         let val = f32::from_be_bytes(self.read.read_arr()?);
@@ -690,6 +694,188 @@ mod tests {
     fn test_decode_neg_1000() -> Result<()> {
         let input = hex!("39 03 e7");
         assert_decode_i16_val!(-1000, input);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_pos_zero_fp() -> Result<()> {
+        let input = hex!("f9 00 00");
+        assert_eq!(0.0, from_slice::<f32>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_neg_zero_fp() -> Result<()> {
+        let input = hex!("f9 80 00");
+        assert_eq!(-0.0, from_slice::<f32>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_pos_one_fp() -> Result<()> {
+        let input = hex!("f9 3c 00");
+        assert_eq!(1.0, from_slice::<f32>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_pos_one_dot_one_fp() -> Result<()> {
+        let input = hex!("fb 3f f1 99 99 99 99 99 9a");
+        assert_eq!(1.1, from_slice::<f32>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_pos_one_dot_five_fp() -> Result<()> {
+        let input = hex!("f9 3e 00");
+        assert_eq!(1.5, from_slice::<f32>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_pos_65504_fp() -> Result<()> {
+        let input = hex!("f9 7b ff");
+        assert_eq!(65504.0, from_slice::<f32>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_pos_100000_fp() -> Result<()> {
+        let input = hex!("fa47c35000");
+        assert_eq!(100_000.0, from_slice::<f32>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_pos_long_fp() -> Result<()> {
+        let input = hex!("fa7f7fffff");
+        assert_eq!(3.402_823_466_385_288_6e38f64, from_slice::<f64>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_pos_big_exp_fp() -> Result<()> {
+        let input = hex!("fb7e37e43c8800759c");
+        assert_eq!(1.0e300, from_slice::<f64>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_pos_neg_exp_fp() -> Result<()> {
+        let input = hex!("f90001");
+        assert_eq!(5.960_464_477_539_063e-8, from_slice::<f64>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_pos_decimal_fp() -> Result<()> {
+        let input = hex!("f90400");
+        assert_eq!(0.000_061_035_156_25, from_slice::<f64>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_neg_fp() -> Result<()> {
+        let input = hex!("f9c400");
+        assert_eq!(-4.0, from_slice::<f32>(&input)?);
+        Ok(())
+    }
+
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_decode_neg_64_fp() -> Result<()> {
+        let input = hex!("fbc010666666666666");
+        assert_eq!(-4.1, from_slice::<f64>(&input)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_f16_infinity() -> Result<()> {
+        let input = hex!("f97c00");
+        let actual = from_slice::<f32>(&input)?;
+        assert!(actual.is_infinite());
+        assert!(actual.is_sign_positive());
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_f16_nan() -> Result<()> {
+        let input = hex!("f97e00");
+        let actual = from_slice::<f32>(&input)?;
+        assert!(actual.is_nan());
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_f16_neg_infinity() -> Result<()> {
+        let input = hex!("f9fc00");
+        let actual = from_slice::<f32>(&input)?;
+        assert!(actual.is_infinite());
+        assert!(!actual.is_sign_positive());
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_f32_infinity() -> Result<()> {
+        let input = hex!("fa7f800000");
+        let actual = from_slice::<f32>(&input)?;
+        assert!(actual.is_infinite());
+        assert!(actual.is_sign_positive());
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_f32_nan() -> Result<()> {
+        let input = hex!("fa7fc00000");
+        let actual = from_slice::<f32>(&input)?;
+        assert!(actual.is_nan());
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_f32_neg_infinity() -> Result<()> {
+        let input = hex!("faff800000");
+        let actual = from_slice::<f32>(&input)?;
+        assert!(actual.is_infinite());
+        assert!(!actual.is_sign_positive());
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_f64_infinity() -> Result<()> {
+        let input = hex!("fb7ff0000000000000");
+        let actual = from_slice::<f64>(&input)?;
+        assert!(actual.is_infinite());
+        assert!(actual.is_sign_positive());
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_f64_nan() -> Result<()> {
+        let input = hex!("fb7ff8000000000000");
+        let actual = from_slice::<f64>(&input)?;
+        assert!(actual.is_nan());
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_f64_neg_infinity() -> Result<()> {
+        let input = hex!("fbfff0000000000000");
+        let actual = from_slice::<f64>(&input)?;
+        assert!(actual.is_infinite());
+        assert!(!actual.is_sign_positive());
         Ok(())
     }
 
