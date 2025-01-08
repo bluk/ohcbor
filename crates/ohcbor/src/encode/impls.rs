@@ -31,7 +31,7 @@ use std::{
 
 use crate::{
     encode::{Encode, EncodeArr, Encoder, Error},
-    simple::{SIMPLE_VALUE_FALSE, SIMPLE_VALUE_NULL, SIMPLE_VALUE_TRUE},
+    simple::{SIMPLE_VALUE_FALSE, SIMPLE_VALUE_TRUE},
 };
 
 macro_rules! primitive_impl {
@@ -119,7 +119,7 @@ where
     {
         match self {
             Some(v) => v.encode(encoder),
-            None => encoder.encode_simple(SIMPLE_VALUE_NULL),
+            None => encoder.encode_none(),
         }
     }
 }

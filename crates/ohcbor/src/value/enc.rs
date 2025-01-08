@@ -11,7 +11,7 @@ use super::{Float, Int, Value};
 use crate::{
     encode::{self, Error as _},
     error::Error,
-    ByteString, Tag, NEG_INT_MIN,
+    ByteString, Simple, Tag, NEG_INT_MIN,
 };
 
 pub(super) struct Encoder;
@@ -119,7 +119,7 @@ impl encode::Encoder for Encoder {
 
     fn encode_simple<I>(self, v: I) -> Result<Self::Ok, Self::Error>
     where
-        I: Into<crate::Simple>,
+        I: Into<Simple>,
     {
         Ok(Value::Simple(v.into()))
     }
@@ -130,6 +130,10 @@ impl encode::Encoder for Encoder {
 
     fn encode_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
         Ok(Value::Float(Float(OrderedFloat(v))))
+    }
+
+    fn encode_none(self) -> Result<Self::Ok, Self::Error> {
+        Ok(Value::Simple(Simple::NULL))
     }
 }
 

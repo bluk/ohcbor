@@ -348,6 +348,11 @@ where
         self.writer.write_all(&[IB_FP_SIMPLE_MIN | 27])?;
         self.writer.write_all(&value.to_be_bytes())
     }
+
+    #[inline]
+    fn encode_none(self) -> Result<()> {
+        self.encode_simple(Simple::NULL)
+    }
 }
 
 /// Encoder for writing map data.
@@ -605,8 +610,13 @@ mod tests {
         #[test]
         fn test_simple_value_less_than_24(v in ((0..=23u8).prop_map(Simple::new))) {
             let output = to_vec(&v)?;
-            let decoded_v = from_slice::<Simple>(&output)?;
-            assert_eq!(v, decoded_v);
+            if v.is_null() {
+                let decoded_v = from_slice::<Option<u64>>(&output)?;
+                assert_eq!(None, decoded_v);
+            } else {
+                let decoded_v = from_slice::<Simple>(&output)?;
+                assert_eq!(v, decoded_v);
+            }
         }
 
         #[test]

@@ -65,7 +65,13 @@ impl<'de> Decoder<'de> for Value {
                 let Tag { num, content } = tag;
                 visitor.visit_tag(num, content.into_decoder())
             }
-            Value::Simple(simple) => visitor.visit_simple(simple),
+            Value::Simple(simple) => {
+                if simple.is_null() {
+                    visitor.visit_none()
+                } else {
+                    visitor.visit_simple(simple)
+                }
+            }
             Value::Float(float) => visitor.visit_f64(f64::from(float.0)),
         }
     }
@@ -194,7 +200,13 @@ impl<'de> Decoder<'de> for &'de Value {
                 // Would prefer not to clone the content
                 visitor.visit_tag(tag.num(), tag.content().clone().into_decoder())
             }
-            Value::Simple(simple) => visitor.visit_simple(*simple),
+            Value::Simple(simple) => {
+                if simple.is_null() {
+                    visitor.visit_none()
+                } else {
+                    visitor.visit_simple(*simple)
+                }
+            }
             Value::Float(float) => visitor.visit_f64(f64::from(float.0)),
         }
     }

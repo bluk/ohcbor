@@ -775,10 +775,6 @@ where
             where
                 E: Error,
             {
-                if v.is_null() {
-                    return Ok(None);
-                }
-
                 T::decode(v.into_decoder()).map(Some)
             }
 
@@ -794,6 +790,13 @@ where
                 E: Error,
             {
                 T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(None)
             }
         }
 

@@ -21,6 +21,15 @@ pub const SIMPLE_VALUE_UNDEFINED: u8 = 23;
 pub struct Simple(pub u8);
 
 impl Simple {
+    /// Null
+    pub const NULL: Simple = Simple::new(SIMPLE_VALUE_NULL);
+    /// True
+    pub const TRUE: Simple = Simple::new(SIMPLE_VALUE_TRUE);
+    /// False
+    pub const FALSE: Simple = Simple::new(SIMPLE_VALUE_FALSE);
+    /// Undefined
+    pub const UNDEFINED: Simple = Simple::new(SIMPLE_VALUE_UNDEFINED);
+
     /// Construct a simple value from the numerical value
     #[inline]
     #[must_use]

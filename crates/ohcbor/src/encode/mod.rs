@@ -240,6 +240,9 @@ pub trait Encoder: Sized {
     /// Encode a `f64` value.
     fn encode_f64(self, v: f64) -> Result<Self::Ok, Self::Error>;
 
+    /// Encode a `None` value.
+    fn encode_none(self) -> Result<Self::Ok, Self::Error>;
+
     /// Collect an iterator as an array.
     ///
     /// The default implementation encodes each item yielded by the iterator

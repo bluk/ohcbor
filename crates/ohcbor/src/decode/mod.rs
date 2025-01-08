@@ -217,6 +217,9 @@ pub enum Unexpected<'a> {
     F32(f32),
     /// The input contained a `f64` that was not expected
     F64(f64),
+
+    /// The input contained a `None` value that was not expected
+    None,
 }
 
 macro_rules! unexpected_from {
@@ -262,6 +265,7 @@ impl fmt::Display for Unexpected<'_> {
             Unexpected::Simple(s) => write!(f, "simple value `{s}`"),
             Unexpected::F32(n) => write!(f, "float `{n}`"),
             Unexpected::F64(n) => write!(f, "float `{n}`"),
+            Unexpected::None => write!(f, "None"),
         }
     }
 }
@@ -478,6 +482,14 @@ pub trait Decoder<'de>: Sized {
 }
 
 /// This trait represents a visitor that walks through a decoder.
+///
+/// # Important
+///
+/// There is a [`Visitor::visit_none()`] method as well for `Option::None`
+/// values. A [`Decoder`] should call `visit_none()` if a value is
+/// considered to be equivalent to `None`. This allows decoders to decide
+/// whether `null`, `undefined`, and/or any other value is considered to be
+/// `None`.
 ///
 /// # Lifetime
 ///
@@ -812,6 +824,21 @@ pub trait Visitor<'de>: Sized {
         E: Error,
     {
         Err(Error::invalid_type(Unexpected::F64(v), &self))
+    }
+
+    /// The input is equivalent to `None`.
+    ///
+    /// The default implementation fails with a type error.
+    ///
+    /// # Errors
+    ///
+    /// Any error encountered during decoding or when creating the `Self::Value`
+    /// type can be returned.
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Err(Error::invalid_type(Unexpected::None, &self))
     }
 }
 

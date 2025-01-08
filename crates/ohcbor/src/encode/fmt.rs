@@ -69,6 +69,10 @@ impl Encoder for &mut fmt::Formatter<'_> {
         Err(fmt::Error)
     }
 
+    fn encode_none(self) -> Result<Self::Ok, Self::Error> {
+        Err(fmt::Error)
+    }
+
     fn collect_str<T>(self, value: &T) -> fmt::Result
     where
         T: ?Sized + fmt::Display,

@@ -661,6 +661,13 @@ impl<'de> Decode<'de> for Value {
             {
                 Ok(Value::Float(Float(OrderedFloat(v))))
             }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: crate::decode::Error,
+            {
+                Ok(Value::Simple(Simple::NULL))
+            }
         }
 
         decoder.decode_any(ValueVisitor)

@@ -268,7 +268,14 @@ where
             IB_FP_SIMPLE_MIN..=0xff => {
                 let arg_val = init_byte & ADDTL_INFO_MASK;
                 match arg_val {
-                    0..24 => visitor.visit_simple(Simple::from(arg_val)),
+                    0..24 => {
+                        let v = Simple::from(arg_val);
+                        if v.is_null() {
+                            visitor.visit_none()
+                        } else {
+                            visitor.visit_simple(v)
+                        }
+                    }
                     24 => {
                         let val = self.parse_next()?;
                         if val < 32 {
@@ -899,7 +906,6 @@ mod tests {
     fn test_decode_null() -> Result<()> {
         let input = hex!("f6");
         assert_eq!(from_slice::<Option<i8>>(&input)?, None);
-        assert_eq!(from_slice::<Simple>(&input)?, Simple::new(22));
         Ok(())
     }
 
