@@ -463,6 +463,16 @@ impl From<f64> for Value {
     }
 }
 
+impl From<bool> for Value {
+    fn from(v: bool) -> Self {
+        if v {
+            Value::Simple(Simple::TRUE)
+        } else {
+            Value::Simple(Simple::FALSE)
+        }
+    }
+}
+
 impl<'de> Decode<'de> for Value {
     #[allow(clippy::too_many_lines)]
     #[inline]

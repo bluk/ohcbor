@@ -444,7 +444,12 @@ where
         T: ?Sized + Encode,
     {
         if self.encoded_key {
-            todo!();
+            return Err(Error::new(ErrorKind::NotWellFormed, 0));
+        }
+        if let Some(rem) = &mut self.remaining {
+            if *rem == 0 {
+                return Err(Error::new(ErrorKind::NotWellFormed, 0));
+            }
         }
         self.encoded_key = true;
         key.encode(&mut *self.enc)
@@ -456,27 +461,29 @@ where
         T: ?Sized + Encode,
     {
         if !self.encoded_key {
-            todo!()
+            return Err(Error::new(ErrorKind::NotWellFormed, 0));
+        }
+        if let Some(rem) = &mut self.remaining {
+            if *rem == 0 {
+                return Err(Error::new(ErrorKind::NotWellFormed, 0));
+            }
+            *rem -= 1;
         }
         self.encoded_key = false;
-        if let Some(rem) = self.remaining {
-            self.remaining = Some(rem - 1);
-        }
         value.encode(&mut *self.enc)
     }
 
     #[inline]
     fn end(self) -> Result<()> {
-        if let Some(remaining) = self.remaining {
-            if 0 < remaining {
-                todo!()
+        if let Some(rem) = &self.remaining {
+            if 0 < *rem {
+                Err(Error::new(ErrorKind::NotWellFormed, 0))
+            } else {
+                Ok(())
             }
         } else {
-            todo!()
-            // End with marker
+            self.enc.writer.write_all(&[BREAK_CODE])
         }
-
-        Ok(())
     }
 }
 

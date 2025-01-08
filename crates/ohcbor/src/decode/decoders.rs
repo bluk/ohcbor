@@ -43,7 +43,7 @@ where
         }
     }
 
-    fn on_end_arr(&mut self, remaining: Option<usize>) -> Result<(), crate::Error> {
+    fn on_end_remaining(&mut self, remaining: Option<usize>) -> Result<(), crate::Error> {
         if let Some(remaining) = remaining {
             if 0 < remaining {
                 Err(crate::Error::new(
@@ -226,19 +226,23 @@ where
                     remaining: &mut remaining,
                 });
 
-                match (ret, self.on_end_arr(remaining)) {
+                match (ret, self.on_end_remaining(remaining)) {
                     (Ok(ret), Ok(())) => Ok(ret),
                     (Err(err), _) | (_, Err(err)) => Err(err),
                 }
             }
             IB_MAP_MIN..IB_TAG_MIN => {
-                let len = self.read.parse_len(init_byte)?;
+                let mut remaining = self.read.parse_len(init_byte)?;
 
-                visitor.visit_map(MapAccessImpl {
+                let ret = visitor.visit_map(MapAccessImpl {
                     de: self,
-                    len,
-                    count: 0,
-                })
+                    remaining: &mut remaining,
+                });
+
+                match (ret, self.on_end_remaining(remaining)) {
+                    (Ok(ret), Ok(())) => Ok(ret),
+                    (Err(err), _) | (_, Err(err)) => Err(err),
+                }
             }
             IB_TAG_MIN..IB_FP_SIMPLE_MIN => {
                 let arg_val = init_byte & ADDTL_INFO_MASK;
@@ -345,10 +349,8 @@ where
 
 struct MapAccessImpl<'a, R, B> {
     de: &'a mut DecoderImpl<R, B>,
-    /// Expected number of pair of items. If `None`, the list has an indefinite length
-    len: Option<usize>,
-    /// Number of elements already decoded
-    count: usize,
+    /// Expected number of pair of items remaining. If `None`, the list has an indefinite length
+    remaining: &'a mut Option<usize>,
 }
 
 impl<'de, 'a, R: Read<'de> + 'a, B> MapAccess<'de> for MapAccessImpl<'a, R, B>
@@ -361,17 +363,16 @@ where
     where
         K: DecodeSeed<'de>,
     {
-        if let Some(len) = self.len {
-            if len == self.count {
+        if let Some(remaining) = &mut self.remaining {
+            if *remaining == 0 {
                 return Ok(None);
             }
-            self.count += 1;
-
-            seed.decode(MapKey { de: &mut *self.de }).map(Some)
-        } else {
-            // Indefinite length
-            todo!()
+            *remaining -= 1;
+        } else if let Ok(BREAK_CODE) = self.de.parse_peek() {
+            return Ok(None);
         }
+
+        seed.decode(&mut *self.de).map(Some)
     }
 
     #[inline]
@@ -382,28 +383,9 @@ where
         seed.decode(&mut *self.de)
     }
 
-    fn size_hint(&self) -> Option<usize> {
-        self.len
-    }
-}
-
-struct MapKey<'a, R, B> {
-    de: &'a mut DecoderImpl<R, B>,
-}
-
-impl<'de, R, B> Decoder<'de> for MapKey<'_, R, B>
-where
-    R: Read<'de>,
-    B: Buffer,
-{
-    type Error = crate::Error;
-
     #[inline]
-    fn decode_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
-    where
-        V: Visitor<'de>,
-    {
-        self.de.decode_any(visitor)
+    fn size_hint(&self) -> Option<usize> {
+        *self.remaining
     }
 }
 
@@ -1298,6 +1280,44 @@ mod tests {
                 24, 25
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_indefinite_map_value() -> Result<()> {
+        let input = hex!("bf61610161629f0203ffff");
+        let m: BTreeMap<Value, Value> = [
+            ("a".into(), 1.into()),
+            ("b".into(), Value::Array(vec![2.into(), 3.into()])),
+        ]
+        .into_iter()
+        .collect();
+        let expected: Value = Value::Map(m);
+        assert_eq!(from_slice::<Value>(&input)?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_indefinite_arr_value() -> Result<()> {
+        let input = hex!("826161bf61626163ff");
+        let m: BTreeMap<Value, Value> = [("b".into(), "c".into())].into_iter().collect();
+        let expected: Value = Value::Array(vec!["a".into(), Value::Map(m)]);
+        assert_eq!(from_slice::<Value>(&input)?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_indefinite_map_value_2() -> Result<()> {
+        let input = hex!("bf6346756ef563416d7421ff");
+        let expected = Value::Map(
+            [
+                ("Fun".into(), true.into()),
+                ("Amt".into(), Value::from(-2i32)),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        assert_eq!(from_slice::<Value>(&input)?, expected);
         Ok(())
     }
 
