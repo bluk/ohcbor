@@ -1054,58 +1054,58 @@ macro_rules! arr_impl {
 fn nop_reserve<T>(_seq: T, _n: usize) {}
 
 arr_impl!(
-  #[cfg(any(feature = "std", feature = "alloc"))]
-  #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
-  BinaryHeap<T: Ord>,
-  arr,
-  BinaryHeap::clear,
-  BinaryHeap::with_capacity(size_hint::cautious::<T>(arr.size_hint())),
-  BinaryHeap::reserve,
-  BinaryHeap::push
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
+    BinaryHeap<T: Ord>,
+    arr,
+    BinaryHeap::clear,
+    BinaryHeap::with_capacity(size_hint::cautious::<T>(arr.size_hint())),
+    BinaryHeap::reserve,
+    BinaryHeap::push
 );
 
 arr_impl!(
-  #[cfg(any(feature = "std", feature = "alloc"))]
-  #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
-  BTreeSet<T: Eq + Ord>,
-  arr,
-  BTreeSet::clear,
-  BTreeSet::new(),
-  nop_reserve,
-  BTreeSet::insert
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
+    BTreeSet<T: Eq + Ord>,
+    arr,
+    BTreeSet::clear,
+    BTreeSet::new(),
+    nop_reserve,
+    BTreeSet::insert
 );
 
 arr_impl!(
-  #[cfg(any(feature = "std", feature = "alloc"))]
-  #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
-  LinkedList<T>,
-  arr,
-  LinkedList::clear,
-  LinkedList::new(),
-  nop_reserve,
-  LinkedList::push_back
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
+    LinkedList<T>,
+    arr,
+    LinkedList::clear,
+    LinkedList::new(),
+    nop_reserve,
+    LinkedList::push_back
 );
 
 arr_impl!(
-  #[cfg(feature = "std")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-  HashSet<T: Eq + Hash, S: BuildHasher + Default>,
-  arr,
-  HashSet::clear,
-  HashSet::with_capacity_and_hasher(size_hint::cautious::<T>(arr.size_hint()), S::default()),
-  HashSet::reserve,
-  HashSet::insert
+    #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+    HashSet<T: Eq + Hash, S: BuildHasher + Default>,
+    arr,
+    HashSet::clear,
+    HashSet::with_capacity_and_hasher(size_hint::cautious::<T>(arr.size_hint()), S::default()),
+    HashSet::reserve,
+    HashSet::insert
 );
 
 arr_impl!(
-  #[cfg(any(feature = "std", feature = "alloc"))]
-  #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
-  VecDeque<T>,
-  arr,
-  VecDeque::clear,
-  VecDeque::with_capacity(size_hint::cautious::<T>(arr.size_hint())),
-  VecDeque::reserve,
-  VecDeque::push_back
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
+    VecDeque<T>,
+    arr,
+    VecDeque::clear,
+    VecDeque::with_capacity(size_hint::cautious::<T>(arr.size_hint())),
+    VecDeque::reserve,
+    VecDeque::push_back
 );
 
 #[cfg(any(feature = "std", feature = "alloc"))]
@@ -1527,19 +1527,19 @@ macro_rules! map_impl {
 }
 
 map_impl! {
-  #[cfg(any(feature = "std", feature = "alloc"))]
-  #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
-  BTreeMap<K: Ord, V>,
-  map,
-  BTreeMap::new(),
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
+    BTreeMap<K: Ord, V>,
+    map,
+    BTreeMap::new(),
 }
 
 map_impl! {
-  #[cfg(feature = "std")]
-  #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-  HashMap<K: Eq + Hash, V, S: BuildHasher + Default>,
-  map,
-  HashMap::with_capacity_and_hasher(size_hint::cautious::<(K, V)>(map.size_hint()), S::default()),
+    #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+    HashMap<K: Eq + Hash, V, S: BuildHasher + Default>,
+    map,
+    HashMap::with_capacity_and_hasher(size_hint::cautious::<(K, V)>(map.size_hint()), S::default()),
 }
 
 forwarded_impl! {
