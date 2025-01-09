@@ -700,6 +700,21 @@ pub trait Visitor<'de>: Sized {
         self.visit_str(v)
     }
 
+    /// The input contains an indefinite string value.
+    ///
+    /// The default implementation fails with a type error.
+    ///
+    /// # Errors
+    ///
+    /// Any error encountered during decoding or when creating the `Self::Value`
+    /// type can be returned.
+    fn visit_indefinite_len_str<A>(self, _b: A) -> Result<Self::Value, A::Error>
+    where
+        A: IndefiniteLenItemAccess<'de>,
+    {
+        Err(Error::invalid_type(Unexpected::Str(""), &self))
+    }
+
     /// The input contains a byte array. The lifetime of the byte array is
     /// ephemeral and it may be destroyed after this method returns.
     ///
@@ -734,6 +749,21 @@ pub trait Visitor<'de>: Sized {
         E: Error,
     {
         self.visit_bytes(v)
+    }
+
+    /// The input contains an indefinite byte string value.
+    ///
+    /// The default implementation fails with a type error.
+    ///
+    /// # Errors
+    ///
+    /// Any error encountered during decoding or when creating the `Self::Value`
+    /// type can be returned.
+    fn visit_indefinite_len_bytes<A>(self, _b: A) -> Result<Self::Value, A::Error>
+    where
+        A: IndefiniteLenItemAccess<'de>,
+    {
+        Err(Error::invalid_type(Unexpected::Bytes(&[]), &self))
     }
 
     /// The input contains an array of elements.
@@ -839,6 +869,76 @@ pub trait Visitor<'de>: Sized {
         E: Error,
     {
         Err(Error::invalid_type(Unexpected::None, &self))
+    }
+}
+
+/// Provides a [`Visitor`] access to each part of an indefinite length item in
+/// the input.
+///
+/// This is a trait that a [`Decoder`] passes to a [`Visitor`] implementation,
+/// which decodes each chunk of an item.
+///
+/// # Lifetime
+///
+/// The `'de` lifetime of this trait is the lifetime of data that may be
+/// borrowed by decoded chunks. See Serde's page [Understanding deserializer
+/// lifetimes] for a more detailed explanation of these lifetimes.
+///
+/// [Understanding deserializer lifetimes]: https://serde.rs/lifetimes.html
+pub trait IndefiniteLenItemAccess<'de> {
+    /// Error type that can be returned if some error occurs during
+    /// decoding.
+    type Error: Error;
+
+    /// Returns `Ok(Some(value))` for the next chunk of the item, or `Ok(None)`
+    /// if there are no more remaining parts.
+    ///
+    /// # Errors
+    ///
+    /// Similar to [`Decoder::decode_any`].
+    fn next_chunk_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
+    where
+        T: DecodeSeed<'de>;
+
+    /// Returns `Ok(Some(value))` for the next value in the list, or `Ok(None)`
+    /// if there are no more remaining chunks.
+    ///
+    /// This method exists as a convenience for `Decode` implementations.
+    /// `IndefiniteLenItemAccess` implementations should not override the
+    /// default behavior.
+    ///
+    /// # Errors
+    ///
+    /// Similar to [`Decoder::decode_any`].
+    #[inline]
+    fn next_chunk<T>(&mut self) -> Result<Option<T>, Self::Error>
+    where
+        T: Decode<'de>,
+    {
+        self.next_chunk_seed(PhantomData)
+    }
+}
+
+impl<'de, A> IndefiniteLenItemAccess<'de> for &mut A
+where
+    A: ?Sized + IndefiniteLenItemAccess<'de>,
+{
+    type Error = A::Error;
+
+    #[inline]
+    fn next_chunk_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
+    where
+        T: DecodeSeed<'de>,
+    {
+        (**self).next_chunk_seed(seed)
+    }
+
+    #[inline]
+    fn next_chunk<T>(&mut self) -> Result<Option<T>, Self::Error>
+    where
+        T: Decode<'de>,
+    {
+        (**self).next_chunk()
     }
 }
 

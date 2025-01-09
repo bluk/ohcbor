@@ -30,6 +30,8 @@ use crate::{
     Simple,
 };
 
+use super::IndefiniteLenItemAccess;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // For structs that contain a PhantomData. We do not want the trait
@@ -1384,5 +1386,81 @@ impl<E> fmt::Debug for TagDecoder<E> {
         f.debug_struct("TagDecoder")
             .field("tag_num", &self.tag_num)
             .finish()
+    }
+}
+
+/// A decoder holding a `IndefiniteItemAccess`.
+#[derive(Clone, Debug)]
+pub struct IndefiniteLenBytesAccessDecoder<A> {
+    arr: A,
+}
+
+impl<A> IndefiniteLenBytesAccessDecoder<A> {
+    /// Construct a new `IndefiniteItemAccessDecoder<A>`.
+    pub fn new(arr: A) -> Self {
+        Self { arr }
+    }
+}
+
+impl<'de, A> Decoder<'de> for IndefiniteLenBytesAccessDecoder<A>
+where
+    A: IndefiniteLenItemAccess<'de>,
+{
+    type Error = A::Error;
+
+    fn decode_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_indefinite_len_bytes(self.arr)
+    }
+}
+
+impl<'de, A> IntoDecoder<'de, A::Error> for IndefiniteLenBytesAccessDecoder<A>
+where
+    A: IndefiniteLenItemAccess<'de>,
+{
+    type Decoder = Self;
+
+    fn into_decoder(self) -> Self {
+        self
+    }
+}
+
+/// A decoder holding a `IndefiniteItemAccess`.
+#[derive(Clone, Debug)]
+pub struct IndefiniteLenStringAccessDecoder<A> {
+    arr: A,
+}
+
+impl<A> IndefiniteLenStringAccessDecoder<A> {
+    /// Construct a new `IndefiniteItemAccessDecoder<A>`.
+    pub fn new(arr: A) -> Self {
+        Self { arr }
+    }
+}
+
+impl<'de, A> Decoder<'de> for IndefiniteLenStringAccessDecoder<A>
+where
+    A: IndefiniteLenItemAccess<'de>,
+{
+    type Error = A::Error;
+
+    fn decode_any<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'de>,
+    {
+        visitor.visit_indefinite_len_str(self.arr)
+    }
+}
+
+impl<'de, A> IntoDecoder<'de, A::Error> for IndefiniteLenStringAccessDecoder<A>
+where
+    A: IndefiniteLenItemAccess<'de>,
+{
+    type Decoder = Self;
+
+    fn into_decoder(self) -> Self {
+        self
     }
 }

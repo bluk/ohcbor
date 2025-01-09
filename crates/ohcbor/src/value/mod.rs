@@ -10,7 +10,7 @@ use std::{boxed::Box, collections::BTreeMap, fmt, str, str::FromStr, string::Str
 use ordered_float::OrderedFloat;
 
 use crate::{
-    decode::{Decode, DecodeOwned, Decoder, Visitor},
+    decode::{Decode, DecodeOwned, DecodeSeed, Decoder, IndefiniteLenItemAccess, Visitor},
     encode::{Encode, Encoder},
     error::Error,
     ByteString, Simple, Tag, NEG_INT_MIN,
@@ -584,6 +584,64 @@ impl<'de> Decode<'de> for Value {
                 }
             }
 
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: crate::decode::Error,
+            {
+                Ok(Value::ByteStr(ByteString::from(v)))
+            }
+
+            fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
+            where
+                E: crate::decode::Error,
+            {
+                self.visit_bytes(v)
+            }
+
+            fn visit_indefinite_len_bytes<A>(self, mut b: A) -> Result<Self::Value, A::Error>
+            where
+                A: IndefiniteLenItemAccess<'de>,
+            {
+                struct Bytes(Vec<u8>);
+
+                impl<'de> DecodeSeed<'de> for &mut Bytes {
+                    type Value = ();
+
+                    fn decode<D>(self, decoder: D) -> Result<Self::Value, D::Error>
+                    where
+                        D: Decoder<'de>,
+                    {
+                        struct BytesVisitor<'a>(&'a mut Vec<u8>);
+
+                        impl Visitor<'_> for BytesVisitor<'_> {
+                            type Value = ();
+
+                            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                                f.write_str("byte string")
+                            }
+
+                            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+                            where
+                                E: crate::decode::Error,
+                            {
+                                self.0.extend_from_slice(v);
+                                Ok(())
+                            }
+                        }
+
+                        decoder.decode_any(BytesVisitor(&mut self.0))?;
+
+                        Ok(())
+                    }
+                }
+
+                let mut bytes = Bytes(Vec::new());
+
+                while b.next_chunk_seed(&mut bytes)?.is_some() {}
+
+                Ok(Value::ByteStr(ByteString::from(bytes.0)))
+            }
+
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where
                 E: crate::decode::Error,
@@ -598,18 +656,48 @@ impl<'de> Decode<'de> for Value {
                 self.visit_str(v)
             }
 
-            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            fn visit_indefinite_len_str<A>(self, mut a: A) -> Result<Self::Value, A::Error>
             where
-                E: crate::decode::Error,
+                A: IndefiniteLenItemAccess<'de>,
             {
-                Ok(Value::ByteStr(ByteString::from(v)))
-            }
+                struct S(String);
 
-            fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
-            where
-                E: crate::decode::Error,
-            {
-                self.visit_bytes(v)
+                impl<'de> DecodeSeed<'de> for &mut S {
+                    type Value = ();
+
+                    fn decode<D>(self, decoder: D) -> Result<Self::Value, D::Error>
+                    where
+                        D: Decoder<'de>,
+                    {
+                        struct SVisitor<'a>(&'a mut String);
+
+                        impl Visitor<'_> for SVisitor<'_> {
+                            type Value = ();
+
+                            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                                f.write_str("text string")
+                            }
+
+                            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                            where
+                                E: crate::decode::Error,
+                            {
+                                self.0.push_str(v);
+                                Ok(())
+                            }
+                        }
+
+                        decoder.decode_any(SVisitor(&mut self.0))?;
+
+                        Ok(())
+                    }
+                }
+
+                let mut s = S(String::new());
+
+                while a.next_chunk_seed(&mut s)?.is_some() {}
+
+                Ok(Value::TextStr(s.0))
             }
 
             fn visit_arr<A>(self, mut v: A) -> Result<Self::Value, A::Error>

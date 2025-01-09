@@ -7,6 +7,8 @@ use crate::{
     IB_MAP_MIN, IB_NEG_INT_MIN, IB_TAG_MIN, IB_TEXT_STR_MIN, IB_UINT_MIN,
 };
 
+use super::IndefiniteLenItemAccess;
+
 pub(crate) struct DecoderImpl<R, B> {
     read: R,
     /// Temporary buffer used to reduce allocations made
@@ -189,33 +191,50 @@ where
                 }
             }
             IB_BYTE_STR_MIN..IB_TEXT_STR_MIN => {
-                let len = self.read.parse_len(init_byte)?.unwrap();
-
                 self.buf.clear();
-                match self.read.read_exact(len, &mut self.buf)? {
-                    Ref::Source(bytes) => visitor.visit_borrowed_bytes(bytes),
-                    Ref::Buffer(bytes) => visitor.visit_bytes(bytes.as_slice()),
+                if let Some(len) = self.read.parse_len(init_byte)? {
+                    match self.read.read_exact(len, &mut self.buf)? {
+                        Ref::Source(bytes) => visitor.visit_borrowed_bytes(bytes),
+                        Ref::Buffer(bytes) => visitor.visit_bytes(bytes.as_slice()),
+                    }
+                } else {
+                    let ret =
+                        visitor.visit_indefinite_len_bytes(IndefiniteItemAccessImpl { de: self });
+
+                    match (ret, self.on_end_remaining(None)) {
+                        (Ok(ret), Ok(())) => Ok(ret),
+                        (Err(err), _) | (_, Err(err)) => Err(err),
+                    }
                 }
             }
             IB_TEXT_STR_MIN..IB_ARRAY_MIN => {
-                let len = self.read.parse_len(init_byte)?.unwrap();
-
                 self.buf.clear();
-                match self.read.read_exact(len, &mut self.buf)? {
-                    Ref::Source(bytes) => match core::str::from_utf8(bytes) {
-                        Ok(s) => visitor.visit_borrowed_str(s),
-                        Err(e) => Err(crate::Error::new(
-                            ErrorKind::InvalidUtf8Error(e),
-                            self.read.byte_offset(),
-                        )),
-                    },
-                    Ref::Buffer(bytes) => match core::str::from_utf8(bytes.as_slice()) {
-                        Ok(s) => visitor.visit_str(s),
-                        Err(e) => Err(crate::Error::new(
-                            ErrorKind::InvalidUtf8Error(e),
-                            self.read.byte_offset(),
-                        )),
-                    },
+
+                if let Some(len) = self.read.parse_len(init_byte)? {
+                    match self.read.read_exact(len, &mut self.buf)? {
+                        Ref::Source(bytes) => match core::str::from_utf8(bytes) {
+                            Ok(s) => visitor.visit_borrowed_str(s),
+                            Err(e) => Err(crate::Error::new(
+                                ErrorKind::InvalidUtf8Error(e),
+                                self.read.byte_offset(),
+                            )),
+                        },
+                        Ref::Buffer(bytes) => match core::str::from_utf8(bytes.as_slice()) {
+                            Ok(s) => visitor.visit_str(s),
+                            Err(e) => Err(crate::Error::new(
+                                ErrorKind::InvalidUtf8Error(e),
+                                self.read.byte_offset(),
+                            )),
+                        },
+                    }
+                } else {
+                    let ret =
+                        visitor.visit_indefinite_len_str(IndefiniteItemAccessImpl { de: self });
+
+                    match (ret, self.on_end_remaining(None)) {
+                        (Ok(ret), Ok(())) => Ok(ret),
+                        (Err(err), _) | (_, Err(err)) => Err(err),
+                    }
                 }
             }
             IB_ARRAY_MIN..IB_MAP_MIN => {
@@ -310,6 +329,29 @@ where
                 }
             }
         }
+    }
+}
+
+struct IndefiniteItemAccessImpl<'a, R, B> {
+    de: &'a mut DecoderImpl<R, B>,
+}
+
+impl<'de, 'a, R: Read<'de> + 'a, B> IndefiniteLenItemAccess<'de>
+    for IndefiniteItemAccessImpl<'a, R, B>
+where
+    B: Buffer,
+{
+    type Error = crate::Error;
+
+    fn next_chunk_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Self::Error>
+    where
+        T: DecodeSeed<'de>,
+    {
+        if let Ok(BREAK_CODE) = self.de.parse_peek() {
+            return Ok(None);
+        }
+
+        Ok(Some(seed.decode(&mut *self.de)?))
     }
 }
 
@@ -1228,6 +1270,42 @@ mod tests {
         .collect();
         let expected: Value = Value::Map(m);
         assert_eq!(from_slice::<Value>(&input)?, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_indefinite_byte_str() -> Result<()> {
+        let input = hex!("5f42010243030405ff");
+        assert_eq!(
+            *from_slice::<ByteString>(&input)?,
+            &[0x01, 0x02, 0x03, 0x04, 0x05]
+        );
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_decode_reader_indefinite_byte_str() -> Result<()> {
+        let input = hex!("5f42010243030405ff");
+        assert_eq!(
+            *from_reader::<_, ByteString>(&input[..])?,
+            &[0x01, 0x02, 0x03, 0x04, 0x05]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode_indefinite_text_str() -> Result<()> {
+        let input = hex!("7f657374726561646d696e67ff");
+        assert_eq!(from_slice::<String>(&input)?, "streaming");
+        Ok(())
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn test_decode_reader_indefinite_text_str() -> Result<()> {
+        let input = hex!("7f657374726561646d696e67ff");
+        assert_eq!(from_reader::<_, String>(&input[..])?, "streaming");
         Ok(())
     }
 

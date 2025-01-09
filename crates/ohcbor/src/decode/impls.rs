@@ -31,10 +31,12 @@ use crate::{
     decode::{
         seed::InPlaceSeed,
         value::{
-            ArrAccessDecoder, BorrowedBytesDecoder, BorrowedStrDecoder, MapAccessDecoder,
+            ArrAccessDecoder, BorrowedBytesDecoder, BorrowedStrDecoder,
+            IndefiniteLenBytesAccessDecoder, IndefiniteLenStringAccessDecoder, MapAccessDecoder,
             TagDecoder,
         },
-        ArrAccess, Decode, Decoder, Error, IntoDecoder, Unexpected, Visitor,
+        ArrAccess, Decode, DecodeSeed, Decoder, Error, IndefiniteLenItemAccess, IntoDecoder,
+        Unexpected, Visitor,
     },
     Simple,
 };
@@ -473,18 +475,11 @@ impl<'de> Decode<'de> for String {
     {
         struct StringVisitor;
 
-        impl Visitor<'_> for StringVisitor {
+        impl<'de> Visitor<'de> for StringVisitor {
             type Value = String;
 
             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 f.write_str("a string")
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                Ok(v.to_owned())
             }
 
             fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
@@ -495,31 +490,119 @@ impl<'de> Decode<'de> for String {
                     .map(ToOwned::to_owned)
                     .map_err(|_| Error::invalid_value(Unexpected::Bytes(v), &self))
             }
-        }
 
-        decoder.decode_any(StringVisitor)
-    }
+            fn visit_indefinite_len_bytes<A>(self, mut a: A) -> Result<Self::Value, A::Error>
+            where
+                A: IndefiniteLenItemAccess<'de>,
+            {
+                struct Bytes(Vec<u8>);
 
-    fn decode_in_place<D>(decoder: D, place: &mut Self) -> Result<(), D::Error>
-    where
-        D: Decoder<'de>,
-    {
-        struct StringInPlaceVisitor<'a>(&'a mut String);
+                impl<'de> DecodeSeed<'de> for &mut Bytes {
+                    type Value = ();
 
-        impl Visitor<'_> for StringInPlaceVisitor<'_> {
-            type Value = ();
+                    fn decode<D>(self, decoder: D) -> Result<Self::Value, D::Error>
+                    where
+                        D: Decoder<'de>,
+                    {
+                        struct BytesVisitor<'a>(&'a mut Vec<u8>);
 
-            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("a string")
+                        impl Visitor<'_> for BytesVisitor<'_> {
+                            type Value = ();
+
+                            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                                f.write_str("byte string")
+                            }
+
+                            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+                            where
+                                E: Error,
+                            {
+                                self.0.extend_from_slice(v);
+                                Ok(())
+                            }
+                        }
+
+                        decoder.decode_any(BytesVisitor(&mut self.0))?;
+
+                        Ok(())
+                    }
+                }
+
+                let mut bytes = Bytes(Vec::new());
+
+                while a.next_chunk_seed(&mut bytes)?.is_some() {}
+
+                String::from_utf8(bytes.0)
+                    .map_err(|_| Error::invalid_value(Unexpected::Bytes(&[]), &self))
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where
                 E: Error,
             {
-                self.0.clear();
-                self.0.push_str(v);
-                Ok(())
+                Ok(v.to_owned())
+            }
+
+            fn visit_indefinite_len_str<A>(self, mut a: A) -> Result<Self::Value, A::Error>
+            where
+                A: IndefiniteLenItemAccess<'de>,
+            {
+                struct S(String);
+
+                impl<'de> DecodeSeed<'de> for &mut S {
+                    type Value = ();
+
+                    fn decode<D>(self, decoder: D) -> Result<Self::Value, D::Error>
+                    where
+                        D: Decoder<'de>,
+                    {
+                        struct SVisitor<'a>(&'a mut String);
+
+                        impl Visitor<'_> for SVisitor<'_> {
+                            type Value = ();
+
+                            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                                f.write_str("text string")
+                            }
+
+                            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                            where
+                                E: Error,
+                            {
+                                self.0.push_str(v);
+                                Ok(())
+                            }
+                        }
+
+                        decoder.decode_any(SVisitor(&mut self.0))?;
+
+                        Ok(())
+                    }
+                }
+
+                let mut s = S(String::new());
+
+                while a.next_chunk_seed(&mut s)?.is_some() {}
+
+                Ok(s.0)
+            }
+        }
+
+        decoder.decode_any(StringVisitor)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn decode_in_place<D>(decoder: D, place: &mut Self) -> Result<(), D::Error>
+    where
+        D: Decoder<'de>,
+    {
+        struct StringInPlaceVisitor<'a>(&'a mut String);
+
+        impl<'de> Visitor<'de> for StringInPlaceVisitor<'_> {
+            type Value = ();
+
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a string")
             }
 
             fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
@@ -534,6 +617,110 @@ impl<'de> Decode<'de> for String {
                     }
                     Err(_) => Err(Error::invalid_value(Unexpected::Bytes(v), &self)),
                 }
+            }
+
+            fn visit_indefinite_len_bytes<A>(self, mut a: A) -> Result<Self::Value, A::Error>
+            where
+                A: IndefiniteLenItemAccess<'de>,
+            {
+                struct Bytes(Vec<u8>);
+
+                impl<'de> DecodeSeed<'de> for &mut Bytes {
+                    type Value = ();
+
+                    fn decode<D>(self, decoder: D) -> Result<Self::Value, D::Error>
+                    where
+                        D: Decoder<'de>,
+                    {
+                        struct BytesVisitor<'a>(&'a mut Vec<u8>);
+
+                        impl Visitor<'_> for BytesVisitor<'_> {
+                            type Value = ();
+
+                            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                                f.write_str("byte string")
+                            }
+
+                            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+                            where
+                                E: Error,
+                            {
+                                self.0.extend_from_slice(v);
+                                Ok(())
+                            }
+                        }
+
+                        decoder.decode_any(BytesVisitor(&mut self.0))?;
+
+                        Ok(())
+                    }
+                }
+
+                let mut bytes = Bytes(Vec::new());
+
+                while a.next_chunk_seed(&mut bytes)?.is_some() {}
+
+                let s = String::from_utf8(bytes.0)
+                    .map_err(|_| Error::invalid_value(Unexpected::Bytes(&[]), &self))?;
+
+                self.0.clear();
+                self.0.push_str(&s);
+                Ok(())
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                self.0.clear();
+                self.0.push_str(v);
+                Ok(())
+            }
+
+            fn visit_indefinite_len_str<A>(self, mut a: A) -> Result<Self::Value, A::Error>
+            where
+                A: IndefiniteLenItemAccess<'de>,
+            {
+                struct S(String);
+
+                impl<'de> DecodeSeed<'de> for &mut S {
+                    type Value = ();
+
+                    fn decode<D>(self, decoder: D) -> Result<Self::Value, D::Error>
+                    where
+                        D: Decoder<'de>,
+                    {
+                        struct SVisitor<'a>(&'a mut String);
+
+                        impl Visitor<'_> for SVisitor<'_> {
+                            type Value = ();
+
+                            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                                f.write_str("text string")
+                            }
+
+                            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                            where
+                                E: Error,
+                            {
+                                self.0.push_str(v);
+                                Ok(())
+                            }
+                        }
+
+                        decoder.decode_any(SVisitor(&mut self.0))?;
+
+                        Ok(())
+                    }
+                }
+
+                let mut s = S(String::new());
+
+                while a.next_chunk_seed(&mut s)?.is_some() {}
+
+                self.0.clear();
+                self.0.push_str(&s.0);
+                Ok(())
             }
         }
 
@@ -736,6 +923,13 @@ where
                 T::decode(BorrowedStrDecoder::new(v)).map(Some)
             }
 
+            fn visit_indefinite_len_str<A>(self, a: A) -> Result<Self::Value, A::Error>
+            where
+                A: IndefiniteLenItemAccess<'a>,
+            {
+                T::decode(IndefiniteLenStringAccessDecoder::new(a)).map(Some)
+            }
+
             fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
             where
                 E: Error,
@@ -748,6 +942,13 @@ where
                 E: Error,
             {
                 T::decode(BorrowedBytesDecoder::new(v)).map(Some)
+            }
+
+            fn visit_indefinite_len_bytes<A>(self, a: A) -> Result<Self::Value, A::Error>
+            where
+                A: IndefiniteLenItemAccess<'a>,
+            {
+                T::decode(IndefiniteLenBytesAccessDecoder::new(a)).map(Some)
             }
 
             fn visit_arr<A>(self, arr: A) -> Result<Self::Value, A::Error>
