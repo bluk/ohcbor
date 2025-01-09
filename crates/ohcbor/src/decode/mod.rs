@@ -652,7 +652,7 @@ pub trait Visitor<'de>: Sized {
     /// The input contains a byte array that lives at least as long as the
     /// `Decoder`.
     ///
-    /// This enables zero-copy deserialization of bytes in some formats.
+    /// This enables zero-copy decoding of bytes in some formats.
     ///
     /// The default implementation forwards to `visit_bytes`.
     ///
@@ -703,7 +703,7 @@ pub trait Visitor<'de>: Sized {
     /// The input contains a string that lives at least as long as the
     /// `Decoder`.
     ///
-    /// This enables zero-copy deserialization of strings in some formats.
+    /// This enables zero-copy decoding of strings in some formats.
     ///
     /// The default implementation forwards to [`Visitor::visit_str()`].
     ///
@@ -1007,7 +1007,7 @@ type EntrySeedResult<K, V, E> = Result<Option<(K, V)>, E>;
 /// [Understanding deserializer lifetimes]: https://serde.rs/lifetimes.html
 pub trait MapAccess<'de> {
     /// Error type that can be returned if some error occurs during
-    /// deserialization.
+    /// decoding.
     type Error: Error;
 
     /// Returns `Ok(Some(key))` for the next key in the map, or `Ok(None)`

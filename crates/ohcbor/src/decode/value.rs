@@ -1,4 +1,4 @@
-//! Building blocks for deserializing basic values using the `IntoDecoder`
+//! Building blocks for decoding basic values using the `IntoDecoder`
 //! trait.
 
 use core::{fmt, iter, marker::PhantomData};
@@ -24,15 +24,12 @@ use std::{
 use self::private::{First, Second};
 use crate::{
     decode::{
-        self, size_hint, ArrAccess, DecodeSeed, Decoder, Expected, IntoDecoder, MapAccess, Visitor,
+        self, size_hint, ArrAccess, DecodeSeed, Decoder, Expected, IndefiniteLenItemAccess,
+        IntoDecoder, MapAccess, Visitor,
     },
     simple::{SIMPLE_VALUE_FALSE, SIMPLE_VALUE_TRUE},
     Simple,
 };
-
-use super::IndefiniteLenItemAccess;
-
-////////////////////////////////////////////////////////////////////////////////
 
 // For structs that contain a PhantomData. We do not want the trait
 // bound `E: Clone` inferred by derive(Clone).
@@ -48,10 +45,8 @@ macro_rules! impl_copy_clone {
     };
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 /// A minimal representation of all possible errors that can occur using the
-/// `IntoDecoder` trait.
+/// [`IntoDecoder`] trait.
 #[derive(Clone, PartialEq)]
 pub struct Error {
     err: ErrorImpl,
@@ -97,7 +92,7 @@ impl fmt::Display for Error {
 
     #[cfg(not(any(feature = "std", feature = "alloc")))]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Decoding error")
+        f.write_str("decoding error")
     }
 }
 
@@ -124,7 +119,7 @@ impl core::error::Error for Error {
 
 macro_rules! primitive_decoder {
     ($ty:ty, $doc:tt, $name:ident, $method:ident $($cast:tt)*) => {
-        #[doc = "A deserializer holding"]
+        #[doc = "A decoder holding"]
         #[doc = $doc]
         pub struct $name<E> {
             value: $ty,
@@ -134,8 +129,7 @@ macro_rules! primitive_decoder {
         impl_copy_clone!($name);
 
         impl<'de, E> IntoDecoder<'de, E> for $ty
-        where
-    E: decode::Error,
+        where E: decode::Error,
         {
             type Decoder = $name<E>;
 
@@ -156,8 +150,7 @@ macro_rules! primitive_decoder {
         }
 
         impl<'de, E> Decoder<'de> for $name<E>
-        where
-    E: decode::Error,
+        where E: decode::Error,
         {
             type Error = E;
 
@@ -170,8 +163,7 @@ macro_rules! primitive_decoder {
         }
 
         impl<'de, E> IntoDecoder<'de, E> for $name<E>
-        where
-    E: decode::Error,
+        where E: decode::Error,
         {
             type Decoder = Self;
 
@@ -619,7 +611,7 @@ pub struct BorrowedBytesDecoder<'de, E> {
 }
 
 impl<'de, E> BorrowedBytesDecoder<'de, E> {
-    /// Create a new borrowed deserializer from the given borrowed bytes.
+    /// Create a new borrowed decoder from the given borrowed bytes.
     #[must_use]
     pub fn new(value: &'de [u8]) -> Self {
         BorrowedBytesDecoder {
@@ -664,8 +656,6 @@ impl<E> fmt::Debug for BorrowedBytesDecoder<'_, E> {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 /// A decoder that iterates over an array.
 #[derive(Clone)]
 pub struct ArrDecoder<I, E> {
@@ -694,7 +684,7 @@ where
     E: decode::Error,
 {
     /// Check for remaining elements after passing a `ArrDecoder` to
-    /// `Visitor::visit_arr`.
+    /// [`Visitor::visit_arr()`].
     ///
     /// # Errors
     ///
@@ -796,8 +786,6 @@ where
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 #[cfg(any(feature = "std", feature = "alloc"))]
 #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
 impl<'de, T, E> IntoDecoder<'de, E> for Vec<T>
@@ -840,8 +828,6 @@ where
         ArrDecoder::new(self.into_iter())
     }
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 /// A decoder holding a `ArrAccess`.
 #[derive(Clone, Debug)]
@@ -918,7 +904,7 @@ where
     E: decode::Error,
 {
     /// Check for remaining elements after passing a `MapDecoder` to
-    /// `Visitor::visit_map`.
+    /// [`Visitor::visit_map()`].
     ///
     /// # Errors
     ///
@@ -1185,8 +1171,6 @@ impl Expected for ExpectedInMap {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
 #[cfg(any(feature = "std", feature = "alloc"))]
 #[cfg_attr(docsrs, doc(cfg(any(feature = "std", feature = "alloc"))))]
 impl<'de, K, V, E> IntoDecoder<'de, E> for BTreeMap<K, V>
@@ -1218,9 +1202,7 @@ where
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-/// A deserializer holding a `MapAccess`.
+/// A decoder holding a `MapAccess`.
 #[derive(Clone, Debug)]
 pub struct MapAccessDecoder<A> {
     map: A,
@@ -1389,14 +1371,14 @@ impl<E> fmt::Debug for TagDecoder<E> {
     }
 }
 
-/// A decoder holding a `IndefiniteItemAccess`.
+/// A decoder holding a `IndefiniteLenItemAccess`.
 #[derive(Clone, Debug)]
 pub struct IndefiniteLenBytesAccessDecoder<A> {
     arr: A,
 }
 
 impl<A> IndefiniteLenBytesAccessDecoder<A> {
-    /// Construct a new `IndefiniteItemAccessDecoder<A>`.
+    /// Construct a new `IndefiniteLenBytesAccessDecoder<A>`.
     pub fn new(arr: A) -> Self {
         Self { arr }
     }
@@ -1427,14 +1409,14 @@ where
     }
 }
 
-/// A decoder holding a `IndefiniteItemAccess`.
+/// A decoder holding a `IndefiniteLenItemAccess`.
 #[derive(Clone, Debug)]
 pub struct IndefiniteLenStringAccessDecoder<A> {
     arr: A,
 }
 
 impl<A> IndefiniteLenStringAccessDecoder<A> {
-    /// Construct a new `IndefiniteItemAccessDecoder<A>`.
+    /// Construct a new `IndefiniteLenStringAccessDecoder<A>`.
     pub fn new(arr: A) -> Self {
         Self { arr }
     }
