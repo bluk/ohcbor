@@ -490,27 +490,6 @@ impl<'de> Decode<'de> for Value {
                 f.write_str("any CBOR value")
             }
 
-            fn visit_i8<E>(self, v: i8) -> Result<Self::Value, E>
-            where
-                E: crate::decode::Error,
-            {
-                self.visit_i64(i64::from(v))
-            }
-
-            fn visit_i16<E>(self, v: i16) -> Result<Self::Value, E>
-            where
-                E: crate::decode::Error,
-            {
-                self.visit_i64(i64::from(v))
-            }
-
-            fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
-            where
-                E: crate::decode::Error,
-            {
-                self.visit_i64(i64::from(v))
-            }
-
             fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
             where
                 E: crate::decode::Error,
@@ -535,32 +514,11 @@ impl<'de> Decode<'de> for Value {
                 } else if let Ok(v) = i64::try_from(v) {
                     Ok(Value::Int(Int::Neg(v)))
                 } else {
-                    Err(crate::decode::Error::invalid_type(
-                        crate::decode::Unexpected::NegI128(v),
+                    Err(crate::decode::Error::invalid_value(
+                        crate::decode::Unexpected::NegInt,
                         &self,
                     ))
                 }
-            }
-
-            fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
-            where
-                E: crate::decode::Error,
-            {
-                self.visit_u64(u64::from(v))
-            }
-
-            fn visit_u16<E>(self, v: u16) -> Result<Self::Value, E>
-            where
-                E: crate::decode::Error,
-            {
-                self.visit_u64(u64::from(v))
-            }
-
-            fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
-            where
-                E: crate::decode::Error,
-            {
-                self.visit_u64(u64::from(v))
             }
 
             fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
@@ -577,8 +535,8 @@ impl<'de> Decode<'de> for Value {
                 if let Ok(v) = u64::try_from(v) {
                     Ok(Value::Int(Int::Pos(v)))
                 } else {
-                    Err(crate::decode::Error::invalid_type(
-                        crate::decode::Unexpected::UnsignedU128(v),
+                    Err(crate::decode::Error::invalid_value(
+                        crate::decode::Unexpected::Int,
                         &self,
                     ))
                 }
@@ -744,13 +702,6 @@ impl<'de> Decode<'de> for Value {
                 E: crate::decode::Error,
             {
                 Ok(Value::Simple(v))
-            }
-
-            fn visit_f32<E>(self, v: f32) -> Result<Self::Value, E>
-            where
-                E: crate::decode::Error,
-            {
-                self.visit_f64(f64::from(v))
             }
 
             fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>

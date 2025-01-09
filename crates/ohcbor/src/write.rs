@@ -50,7 +50,7 @@ where
     fn write_all(&mut self, buf: &[u8]) -> Result<()> {
         self.writer
             .write_all(buf)
-            .map_err(|error| Error::new(ErrorKind::Io(error), 0))
+            .map_err(|error| Error::new(ErrorKind::Io(error)))
     }
 }
 

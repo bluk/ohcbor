@@ -54,10 +54,7 @@ impl encode::Encoder for Encoder {
         } else if let Ok(v) = i64::try_from(v) {
             Ok(Value::Int(Int::Neg(v)))
         } else {
-            Err(crate::decode::Error::invalid_type(
-                crate::decode::Unexpected::NegI128(v),
-                &"i64",
-            ))
+            Err(Self::Error::invalid_value(v))
         }
     }
 
@@ -81,10 +78,7 @@ impl encode::Encoder for Encoder {
         if let Ok(v) = u64::try_from(v) {
             Ok(Value::Int(Int::Pos(v)))
         } else {
-            Err(crate::decode::Error::invalid_type(
-                crate::decode::Unexpected::UnsignedU128(v),
-                &"u64",
-            ))
+            Err(Self::Error::invalid_value(v))
         }
     }
 

@@ -163,7 +163,7 @@ where
 
     fn parse_next(&mut self) -> Result<u8> {
         self.next()
-            .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset()))?
+            .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue))?
     }
 }
 
@@ -184,7 +184,7 @@ where
                     self.byte_offset += 1;
                     Some(Ok(b))
                 }
-                Some(Err(err)) => Some(Err(Error::new(ErrorKind::Io(err), self.byte_offset()))),
+                Some(Err(err)) => Some(Err(Error::new(ErrorKind::Io(err)))),
                 None => None,
             },
         }
@@ -199,7 +199,7 @@ where
                     self.peeked_byte = Some(b);
                     Some(Ok(b))
                 }
-                Some(Err(err)) => Some(Err(Error::new(ErrorKind::Io(err), self.byte_offset()))),
+                Some(Err(err)) => Some(Err(Error::new(ErrorKind::Io(err)))),
                 None => None,
             },
         }
@@ -219,9 +219,10 @@ where
         buf.reserve(len);
 
         for _ in 0..len {
-            buf.push(self.next().ok_or_else(|| {
-                Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset())
-            })??);
+            buf.push(
+                self.next()
+                    .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue))??,
+            );
         }
 
         Ok(Ref::Buffer(buf))
@@ -249,16 +250,14 @@ where
             }
             26 => {
                 let val = self.parse_u32()?;
-                usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidLen, self.byte_offset()))?
+                usize::try_from(val).map_err(|_| Error::new(ErrorKind::InvalidLen))?
             }
             27 => {
                 let val = self.parse_u64()?;
-                usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidLen, self.byte_offset()))?
+                usize::try_from(val).map_err(|_| Error::new(ErrorKind::InvalidLen))?
             }
             28..=30 => {
-                return Err(Error::new(ErrorKind::NotWellFormed, self.byte_offset() - 1));
+                return Err(Error::new(ErrorKind::NotWellFormed));
             }
             31 => {
                 // Indefinite length
@@ -328,10 +327,7 @@ impl<'a> Read<'a> for SliceRead<'a> {
         let slice_len = self.slice.len();
         if slice_len < self.byte_offset {
             self.byte_offset = slice_len;
-            return Err(Error::new(
-                ErrorKind::EofWhileParsingValue,
-                self.byte_offset(),
-            ));
+            return Err(Error::new(ErrorKind::EofWhileParsingValue));
         }
 
         Ok(Ref::Source(&self.slice[start_idx..self.byte_offset]))
@@ -340,10 +336,7 @@ impl<'a> Read<'a> for SliceRead<'a> {
     fn read_arr<const SIZE: usize>(&mut self) -> Result<[u8; SIZE]> {
         if self.slice.len() < self.byte_offset + SIZE {
             self.byte_offset = self.slice.len();
-            return Err(Error::new(
-                ErrorKind::EofWhileParsingValue,
-                self.byte_offset(),
-            ));
+            return Err(Error::new(ErrorKind::EofWhileParsingValue));
         }
 
         let val: [u8; SIZE] = array::from_fn(|offset| self.slice[self.byte_offset + offset]);
@@ -356,9 +349,9 @@ impl<'a> Read<'a> for SliceRead<'a> {
         let len: usize = match addtl_info {
             0..24 => usize::from(addtl_info),
             24 => {
-                let val = self.next().ok_or_else(|| {
-                    Error::new(ErrorKind::EofWhileParsingValue, self.byte_offset())
-                })??;
+                let val = self
+                    .next()
+                    .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue))??;
                 usize::from(val)
             }
             25 => {
@@ -367,16 +360,14 @@ impl<'a> Read<'a> for SliceRead<'a> {
             }
             26 => {
                 let val = self.parse_u32()?;
-                usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidLen, self.byte_offset()))?
+                usize::try_from(val).map_err(|_| Error::new(ErrorKind::InvalidLen))?
             }
             27 => {
                 let val = self.parse_u64()?;
-                usize::try_from(val)
-                    .map_err(|_| Error::new(ErrorKind::InvalidLen, self.byte_offset()))?
+                usize::try_from(val).map_err(|_| Error::new(ErrorKind::InvalidLen))?
             }
             28..=30 => {
-                return Err(Error::new(ErrorKind::NotWellFormed, self.byte_offset() - 1));
+                return Err(Error::new(ErrorKind::NotWellFormed));
             }
             31 => {
                 // Indefinite length

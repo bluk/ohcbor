@@ -84,7 +84,7 @@ impl decode::Error for Error {
         Error { err: () }
     }
 
-    fn malformed(_byte_offset: usize) -> Self {
+    fn malformed() -> Self {
         Self::custom("malformed data")
     }
 }
@@ -122,7 +122,7 @@ impl core::error::Error for Error {
     }
 }
 
-macro_rules! primitive_deserializer {
+macro_rules! primitive_decoder {
     ($ty:ty, $doc:tt, $name:ident, $method:ident $($cast:tt)*) => {
         #[doc = "A deserializer holding"]
         #[doc = $doc]
@@ -191,18 +191,18 @@ macro_rules! primitive_deserializer {
     }
 }
 
-primitive_deserializer!(i8, "an `i8`.", I8Decoder, visit_i8);
-primitive_deserializer!(i16, "an `i16`.", I16Decoder, visit_i16);
-primitive_deserializer!(i32, "an `i32`.", I32Decoder, visit_i32);
-primitive_deserializer!(i64, "an `i64`.", I64Decoder, visit_i64);
-primitive_deserializer!(i128, "an `i128`.", I128Decoder, visit_i128);
-primitive_deserializer!(u8, "a `u8`.", U8Decoder, visit_u8);
-primitive_deserializer!(u16, "a `u16`.", U16Decoder, visit_u16);
-primitive_deserializer!(u32, "a `u32`.", U32Decoder, visit_u32);
-primitive_deserializer!(u64, "a `u64`.", U64Decoder, visit_u64);
-primitive_deserializer!(u128, "a `u128`.", U128Decoder, visit_u128);
-primitive_deserializer!(f32, "an `f32`.", F32Decoder, visit_f32);
-primitive_deserializer!(f64, "an `f64`.", F64Decoder, visit_f64);
+primitive_decoder!(i8, "an `i8`.", I8Decoder, visit_i8);
+primitive_decoder!(i16, "an `i16`.", I16Decoder, visit_i16);
+primitive_decoder!(i32, "an `i32`.", I32Decoder, visit_i32);
+primitive_decoder!(i64, "an `i64`.", I64Decoder, visit_i64);
+primitive_decoder!(i128, "an `i128`.", I128Decoder, visit_i128);
+primitive_decoder!(u8, "a `u8`.", U8Decoder, visit_u8);
+primitive_decoder!(u16, "a `u16`.", U16Decoder, visit_u16);
+primitive_decoder!(u32, "a `u32`.", U32Decoder, visit_u32);
+primitive_decoder!(u64, "a `u64`.", U64Decoder, visit_u64);
+primitive_decoder!(u128, "a `u128`.", U128Decoder, visit_u128);
+primitive_decoder!(f32, "an `f32`.", F32Decoder, visit_f32);
+primitive_decoder!(f64, "an `f64`.", F64Decoder, visit_f64);
 
 /// A decoder holding a `bool`.
 pub struct BoolDecoder<E> {

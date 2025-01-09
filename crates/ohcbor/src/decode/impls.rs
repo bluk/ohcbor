@@ -488,7 +488,7 @@ impl<'de> Decode<'de> for String {
             {
                 core::str::from_utf8(v)
                     .map(ToOwned::to_owned)
-                    .map_err(|_| Error::invalid_value(Unexpected::Bytes(v), &self))
+                    .map_err(|_| Error::invalid_value(Unexpected::Bytes, &self))
             }
 
             fn visit_indefinite_len_bytes<A>(self, mut a: A) -> Result<Self::Value, A::Error>
@@ -533,7 +533,7 @@ impl<'de> Decode<'de> for String {
                 while a.next_chunk_seed(&mut bytes)?.is_some() {}
 
                 String::from_utf8(bytes.0)
-                    .map_err(|_| Error::invalid_value(Unexpected::Bytes(&[]), &self))
+                    .map_err(|_| Error::invalid_value(Unexpected::Bytes, &self))
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -615,7 +615,7 @@ impl<'de> Decode<'de> for String {
                         self.0.push_str(v);
                         Ok(())
                     }
-                    Err(_) => Err(Error::invalid_value(Unexpected::Bytes(v), &self)),
+                    Err(_) => Err(Error::invalid_value(Unexpected::Bytes, &self)),
                 }
             }
 
@@ -661,7 +661,7 @@ impl<'de> Decode<'de> for String {
                 while a.next_chunk_seed(&mut bytes)?.is_some() {}
 
                 let s = String::from_utf8(bytes.0)
-                    .map_err(|_| Error::invalid_value(Unexpected::Bytes(&[]), &self))?;
+                    .map_err(|_| Error::invalid_value(Unexpected::Bytes, &self))?;
 
                 self.0.clear();
                 self.0.push_str(&s);
@@ -746,8 +746,7 @@ impl<'de: 'a, 'a> Decode<'de> for &'a str {
             where
                 E: Error,
             {
-                core::str::from_utf8(v)
-                    .map_err(|_| Error::invalid_value(Unexpected::Bytes(v), &self))
+                core::str::from_utf8(v).map_err(|_| Error::invalid_value(Unexpected::Bytes, &self))
             }
 
             fn visit_borrowed_str<E>(self, v: &'a str) -> Result<Self::Value, E>
@@ -839,27 +838,6 @@ where
                 f.write_str("option")
             }
 
-            fn visit_i8<E>(self, v: i8) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                T::decode(v.into_decoder()).map(Some)
-            }
-
-            fn visit_i16<E>(self, v: i16) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                T::decode(v.into_decoder()).map(Some)
-            }
-
-            fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                T::decode(v.into_decoder()).map(Some)
-            }
-
             fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
             where
                 E: Error,
@@ -868,27 +846,6 @@ where
             }
 
             fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                T::decode(v.into_decoder()).map(Some)
-            }
-
-            fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                T::decode(v.into_decoder()).map(Some)
-            }
-
-            fn visit_u16<E>(self, v: u16) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                T::decode(v.into_decoder()).map(Some)
-            }
-
-            fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
             where
                 E: Error,
             {
@@ -907,27 +864,6 @@ where
                 E: Error,
             {
                 T::decode(v.into_decoder()).map(Some)
-            }
-
-            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                T::decode(v.into_decoder()).map(Some)
-            }
-
-            fn visit_borrowed_str<E>(self, v: &'a str) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                T::decode(BorrowedStrDecoder::new(v)).map(Some)
-            }
-
-            fn visit_indefinite_len_str<A>(self, a: A) -> Result<Self::Value, A::Error>
-            where
-                A: IndefiniteLenItemAccess<'a>,
-            {
-                T::decode(IndefiniteLenStringAccessDecoder::new(a)).map(Some)
             }
 
             fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
@@ -949,6 +885,27 @@ where
                 A: IndefiniteLenItemAccess<'a>,
             {
                 T::decode(IndefiniteLenBytesAccessDecoder::new(a)).map(Some)
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(v.into_decoder()).map(Some)
+            }
+
+            fn visit_borrowed_str<E>(self, v: &'a str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                T::decode(BorrowedStrDecoder::new(v)).map(Some)
+            }
+
+            fn visit_indefinite_len_str<A>(self, a: A) -> Result<Self::Value, A::Error>
+            where
+                A: IndefiniteLenItemAccess<'a>,
+            {
+                T::decode(IndefiniteLenStringAccessDecoder::new(a)).map(Some)
             }
 
             fn visit_arr<A>(self, arr: A) -> Result<Self::Value, A::Error>
@@ -973,13 +930,6 @@ where
             }
 
             fn visit_simple<E>(self, v: Simple) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                T::decode(v.into_decoder()).map(Some)
-            }
-
-            fn visit_f32<E>(self, v: f32) -> Result<Self::Value, E>
             where
                 E: Error,
             {

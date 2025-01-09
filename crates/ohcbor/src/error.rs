@@ -28,9 +28,9 @@ impl Error {
     /// unknown or not relevant.
     #[must_use]
     #[inline]
-    pub fn new(kind: ErrorKind, byte_offset: usize) -> Self {
+    pub fn new(kind: ErrorKind) -> Self {
         Self {
-            inner: Box::new(ErrorImpl { kind, byte_offset }),
+            inner: Box::new(ErrorImpl { kind }),
         }
     }
 
@@ -39,16 +39,6 @@ impl Error {
     #[inline]
     pub fn kind(&self) -> &ErrorKind {
         &self.inner.kind
-    }
-
-    /// The byte offset where the error was detected.
-    ///
-    /// A byte offset value of `0` indicates that the byte offset is either
-    /// unknown or not relevant.
-    #[must_use]
-    #[inline]
-    pub fn byte_offset(&self) -> usize {
-        self.inner.byte_offset
     }
 }
 
@@ -82,25 +72,17 @@ impl From<Error> for std::io::Error {
 
 struct ErrorImpl {
     kind: ErrorKind,
-    byte_offset: usize,
 }
 
 impl Display for ErrorImpl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.byte_offset == 0 {
-            Display::fmt(&self.kind, f)
-        } else {
-            write!(f, "{} at byte offset {}", self.kind, self.byte_offset)
-        }
+        Display::fmt(&self.kind, f)
     }
 }
 
 impl fmt::Debug for ErrorImpl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Error")
-            .field("kind", &self.kind)
-            .field("byte_offset", &self.byte_offset)
-            .finish()
+        f.debug_struct("Error").field("kind", &self.kind).finish()
     }
 }
 
@@ -127,13 +109,9 @@ pub enum ErrorKind {
     Io(std::io::Error),
     /// General encoding error.
     Encode(String),
-    /// An unsupported type was used during serialization.
-    UnsupportedType,
     /// Data is not well formed.
     NotWellFormed,
     /// Length argument is not a valid number
-    ///
-    /// The length could be greater than `usize::MAX`.
     InvalidLen,
     /// Invalid UTF-8
     InvalidUtf8Error(Utf8Error),
@@ -145,7 +123,6 @@ impl Display for ErrorKind {
             ErrorKind::Decode(str) | ErrorKind::Encode(str) => f.write_str(str),
             ErrorKind::EofWhileParsingValue => f.write_str("eof while parsing value"),
             ErrorKind::TrailingData => f.write_str("trailing data error"),
-            ErrorKind::UnsupportedType => f.write_str("unsupported type"),
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => Display::fmt(source, f),
             ErrorKind::NotWellFormed => f.write_str("data is not well formed"),
@@ -161,7 +138,6 @@ impl fmt::Debug for ErrorKind {
             ErrorKind::Decode(str) | ErrorKind::Encode(str) => f.write_str(str),
             ErrorKind::EofWhileParsingValue => f.write_str("eof while parsing value"),
             ErrorKind::TrailingData => f.write_str("trailing data error"),
-            ErrorKind::UnsupportedType => f.write_str("unsupported type"),
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => fmt::Debug::fmt(source, f),
             ErrorKind::NotWellFormed => f.write_str("data is not well formed"),
@@ -178,7 +154,6 @@ impl error::Error for ErrorKind {
             | ErrorKind::EofWhileParsingValue
             | ErrorKind::TrailingData
             | ErrorKind::Encode(_)
-            | ErrorKind::UnsupportedType
             | ErrorKind::NotWellFormed
             | ErrorKind::InvalidLen => None,
             #[cfg(feature = "std")]

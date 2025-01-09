@@ -2,9 +2,14 @@
 //!
 //! OhCbor is a library which decodes and encodes in the [Concise Binary
 //! Object Representation (CBOR)][cbor] data format. CBOR is specified in [RFC
-//! 8949][rfc_8949]. Imagine starting with the JSON data model, making it more
-//! efficient by using a binary (instead of plain text) format, and adding some
-//! extensibility via tagging data.
+//! 8949][rfc_8949].
+//!
+//! CBOR is:
+//!
+//! * a binary format (as opposed to a text format like JSON)
+//! * self-describing meaning a schema description is not required (like JSON)
+//!   and a generic decoder can be used for all CBOR data
+//! * extensible
 //!
 //! # Forking Serde
 //!

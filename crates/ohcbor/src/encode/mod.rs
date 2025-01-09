@@ -123,6 +123,23 @@ pub trait Error: Sized + core::error::Error {
     fn custom<T>(msg: T) -> Self
     where
         T: core::fmt::Display;
+
+    /// Raised when a [`Encode`] receives a value of the right type but that
+    /// is wrong for some other reason.
+    ///
+    /// The `unexp` argument provides information about what value was received.
+    /// This is the value that was present in the input file or other source
+    /// data of the [`Decoder`].
+    ///
+    /// The `exp` argument provides information about what value was being
+    /// expected. This is the type that is written in the program.
+    #[cold]
+    fn invalid_value<T>(v: T) -> Self
+    where
+        T: core::fmt::Display,
+    {
+        Error::custom(format_args!("invalid value: {v}"))
+    }
 }
 
 impl Error for crate::Error {
@@ -130,7 +147,7 @@ impl Error for crate::Error {
     where
         T: core::fmt::Display,
     {
-        crate::Error::new(ErrorKind::Decode(msg.to_string()), 0)
+        crate::Error::new(ErrorKind::Decode(msg.to_string()))
     }
 }
 

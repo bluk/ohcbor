@@ -387,7 +387,7 @@ where
     {
         if let Some(rem) = &mut self.remaining {
             if *rem == 0 {
-                return Err(Error::new(ErrorKind::NotWellFormed, 0));
+                return Err(Error::new(ErrorKind::NotWellFormed));
             }
             *rem -= 1;
         }
@@ -398,7 +398,7 @@ where
     fn end(self) -> Result<()> {
         if let Some(rem) = &self.remaining {
             if 0 < *rem {
-                Err(Error::new(ErrorKind::NotWellFormed, 0))
+                Err(Error::new(ErrorKind::NotWellFormed))
             } else {
                 Ok(())
             }
@@ -444,11 +444,11 @@ where
         T: ?Sized + Encode,
     {
         if self.encoded_key {
-            return Err(Error::new(ErrorKind::NotWellFormed, 0));
+            return Err(Error::new(ErrorKind::NotWellFormed));
         }
         if let Some(rem) = &mut self.remaining {
             if *rem == 0 {
-                return Err(Error::new(ErrorKind::NotWellFormed, 0));
+                return Err(Error::new(ErrorKind::NotWellFormed));
             }
         }
         self.encoded_key = true;
@@ -461,11 +461,11 @@ where
         T: ?Sized + Encode,
     {
         if !self.encoded_key {
-            return Err(Error::new(ErrorKind::NotWellFormed, 0));
+            return Err(Error::new(ErrorKind::NotWellFormed));
         }
         if let Some(rem) = &mut self.remaining {
             if *rem == 0 {
-                return Err(Error::new(ErrorKind::NotWellFormed, 0));
+                return Err(Error::new(ErrorKind::NotWellFormed));
             }
             *rem -= 1;
         }
@@ -477,7 +477,7 @@ where
     fn end(self) -> Result<()> {
         if let Some(rem) = &self.remaining {
             if 0 < *rem {
-                Err(Error::new(ErrorKind::NotWellFormed, 0))
+                Err(Error::new(ErrorKind::NotWellFormed))
             } else {
                 Ok(())
             }

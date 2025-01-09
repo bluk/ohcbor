@@ -57,7 +57,7 @@
 //!    - `num::NonZero*`
 //!    - `num::Saturating<T>`
 //!
-//! Types which are supported by Serde but not this library currently:
+//! Types which are supported by Serde but not this library:
 //!
 //!  - **Primitive types**:
 //!    - `char`
@@ -131,7 +131,7 @@ pub trait Error: Sized + core::error::Error {
     /// The `exp` argument provides information about what type was being
     /// expected. This is the type that is written in the program.
     #[cold]
-    fn invalid_type(unexp: Unexpected<'_>, exp: &dyn Expected) -> Self {
+    fn invalid_type(unexp: Unexpected, exp: &dyn Expected) -> Self {
         Error::custom(format_args!("invalid type: {unexp}, expected {exp}"))
     }
 
@@ -145,7 +145,7 @@ pub trait Error: Sized + core::error::Error {
     /// The `exp` argument provides information about what value was being
     /// expected. This is the type that is written in the program.
     #[cold]
-    fn invalid_value(unexp: Unexpected<'_>, exp: &dyn Expected) -> Self {
+    fn invalid_value(unexp: Unexpected, exp: &dyn Expected) -> Self {
         Error::custom(format_args!("invalid value: {unexp}, expected {exp}"))
     }
 
@@ -163,9 +163,8 @@ pub trait Error: Sized + core::error::Error {
         Error::custom(format_args!("invalid length: {len}, expected {exp}"))
     }
 
-    /// Raised when the CBOR data is malformed such as when an invalid value is
-    /// used for the data type argument.
-    fn malformed(byte_offset: usize) -> Self;
+    /// Raised when the CBOR data is not well-formed.
+    fn malformed() -> Self;
 }
 
 /// Represents an unexpected invocation of any one of the [`Visitor`] trait
@@ -174,33 +173,19 @@ pub trait Error: Sized + core::error::Error {
 /// This is used as an argument to the `invalid_type`, `invalid_value`, and
 /// `invalid_length` methods of the `Error` trait to build error messages.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Unexpected<'a> {
-    /// The input contained an unsigned integer `u8` that was not expected.
-    UnsignedU8(u8),
-    /// The input contained an unsigned integer `u16` that was not expected.
-    UnsignedU16(u16),
-    /// The input contained an unsigned integer `u32` that was not expected.
-    UnsignedU32(u32),
-    /// The input contained an unsigned integer `u64` that was not expected.
-    UnsignedU64(u64),
-    /// The input contained an unsigned integer `u128` that was not expected.
-    UnsignedU128(u128),
-
-    /// The input contained a negative integer `i8` that was not expected.
-    NegI8(i8),
-    /// The input contained a negative integer `i16` that was not expected.
-    NegI16(i16),
-    /// The input contained a negative integer `i32` that was not expected.
-    NegI32(i32),
-    /// The input contained a negative integer `i64` that was not expected.
-    NegI64(i64),
-    /// The input contained a negative integer `i128` that was not expected.
-    NegI128(i128),
-
-    /// The input contained a string that was not expected.
-    Str(&'a str),
+pub enum Unexpected {
+    /// The input contained an integer that was not expected.
+    Int,
+    /// The input contained a negative integer that was not expected.
+    NegInt,
     /// The input contained a byte string that was not expected.
-    Bytes(&'a [u8]),
+    Bytes,
+    /// The input contained a byte string that was not expected.
+    IndefiniteLenBytes,
+    /// The input contained a string that was not expected.
+    Str,
+    /// The input contained a string that was not expected.
+    IndefiniteLenStr,
 
     /// The input contained an array that was not expected.
     Array,
@@ -213,10 +198,8 @@ pub enum Unexpected<'a> {
     /// The input contained a simple value that was not expected
     Simple(Simple),
 
-    /// The input contained a `f32` that was not expected
-    F32(f32),
-    /// The input contained a `f64` that was not expected
-    F64(f64),
+    /// The input contained a float that was not expected
+    Float,
 
     /// The input contained a `None` value that was not expected
     None,
@@ -224,47 +207,45 @@ pub enum Unexpected<'a> {
 
 macro_rules! unexpected_from {
     ($ty:ident:$var:ident) => {
-        impl<'a> From<$ty> for Unexpected<'a> {
-            fn from(value: $ty) -> Self {
-                Self::$var(value)
+        impl From<$ty> for Unexpected {
+            fn from(_: $ty) -> Self {
+                Self::$var
             }
         }
     };
 }
 
-unexpected_from!(u8:UnsignedU8);
-unexpected_from!(u16:UnsignedU16);
-unexpected_from!(u32:UnsignedU32);
-unexpected_from!(u64:UnsignedU64);
-unexpected_from!(u128:UnsignedU128);
-unexpected_from!(i8:NegI8);
-unexpected_from!(i16:NegI16);
-unexpected_from!(i32:NegI32);
-unexpected_from!(i64:NegI64);
-unexpected_from!(i128:NegI128);
-unexpected_from!(Simple:Simple);
+unexpected_from!(u8:Int);
+unexpected_from!(u16:Int);
+unexpected_from!(u32:Int);
+unexpected_from!(u64:Int);
+unexpected_from!(u128:Int);
+unexpected_from!(i8:NegInt);
+unexpected_from!(i16:NegInt);
+unexpected_from!(i32:NegInt);
+unexpected_from!(i64:NegInt);
+unexpected_from!(i128:NegInt);
 
-impl fmt::Display for Unexpected<'_> {
+impl From<Simple> for Unexpected {
+    fn from(value: Simple) -> Self {
+        Self::Simple(value)
+    }
+}
+
+impl fmt::Display for Unexpected {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            Unexpected::UnsignedU8(n) => write!(f, "positive integer {n}"),
-            Unexpected::UnsignedU16(n) => write!(f, "positive integer {n}"),
-            Unexpected::UnsignedU32(n) => write!(f, "positive integer {n}"),
-            Unexpected::UnsignedU64(n) => write!(f, "positive integer {n}"),
-            Unexpected::UnsignedU128(n) => write!(f, "positive integer {n}"),
-            Unexpected::NegI8(n) => write!(f, "negative integer {n}"),
-            Unexpected::NegI16(n) => write!(f, "negative integer {n}"),
-            Unexpected::NegI32(n) => write!(f, "negative integer {n}"),
-            Unexpected::NegI64(n) => write!(f, "negative integer {n}"),
-            Unexpected::NegI128(n) => write!(f, "negative integer {n}"),
-            Unexpected::Str(s) => write!(f, "string {s}"),
-            Unexpected::Bytes(_) => write!(f, "bytes array"),
+            Unexpected::Int => write!(f, "integer"),
+            Unexpected::NegInt => write!(f, "negative integer"),
+            Unexpected::Str => write!(f, "string"),
+            Unexpected::IndefiniteLenStr => write!(f, "indefinite length string"),
+            Unexpected::Bytes => write!(f, "bytes array"),
+            Unexpected::IndefiniteLenBytes => write!(f, "indefinite length bytes array"),
             Unexpected::Array => write!(f, "array"),
             Unexpected::Map => write!(f, "map"),
             Unexpected::Tag(t) => write!(f, "tag `{t}`"),
             Unexpected::Simple(s) => write!(f, "simple value `{s}`"),
-            Unexpected::F32(n) => write!(f, "float `{n}`"),
-            Unexpected::F64(n) => write!(f, "float `{n}`"),
+            Unexpected::Float => write!(f, "float"),
             Unexpected::None => write!(f, "None"),
         }
     }
@@ -320,11 +301,11 @@ impl Error for crate::Error {
     where
         T: fmt::Display,
     {
-        crate::Error::new(ErrorKind::Decode(msg.to_string()), 0)
+        crate::Error::new(ErrorKind::Decode(msg.to_string()))
     }
 
-    fn malformed(byte_offset: usize) -> Self {
-        crate::Error::new(ErrorKind::NotWellFormed, byte_offset)
+    fn malformed() -> Self {
+        crate::Error::new(ErrorKind::NotWellFormed)
     }
 }
 
@@ -446,18 +427,6 @@ where
 /// Assuming `FooVisitor` has implemented `visit_u8()`, then it will attempt to
 /// map that `u8` value into a `Foo` instance.
 ///
-/// # `decode_any()`
-///
-/// `decode_any()` is the main method which most [`Decode::decode()`]
-/// implementations will call. It decodes the next CBOR value and calls the
-/// corresponding [`Visitor`] method.
-///
-/// # Other decode_*() methods
-///
-/// While `decode_any()` works for most types, there are some types which
-/// require unqiue handling. For instance, if a field is an `Option<T>`, then
-/// `decode_option()` should be called.
-///
 /// # Lifetime
 ///
 /// The `'de` lifetime of this trait is the lifetime of data that may be
@@ -485,11 +454,10 @@ pub trait Decoder<'de>: Sized {
 ///
 /// # Important
 ///
-/// There is a [`Visitor::visit_none()`] method as well for `Option::None`
-/// values. A [`Decoder`] should call `visit_none()` if a value is
-/// considered to be equivalent to `None`. This allows decoders to decide
-/// whether `null`, `undefined`, and/or any other value is considered to be
-/// `None`.
+/// There is a [`Visitor::visit_none()`] method for `Option::None` values. A
+/// [`Decoder`] should call `visit_none()` if a value is considered to be
+/// equivalent to `None`. This allows decoders to decide whether `null`,
+/// `undefined`, and/or any other value is considered to be `None`.
 ///
 /// # Lifetime
 ///
@@ -516,7 +484,7 @@ pub trait Visitor<'de>: Sized {
 
     /// The input contains an `i8`.
     ///
-    /// The default implementation fails with a type error.
+    /// The default implementation forwards to [`Visitor::visit_i64()`].
     ///
     /// # Errors
     ///
@@ -526,12 +494,12 @@ pub trait Visitor<'de>: Sized {
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::NegI8(v), &self))
+        self.visit_i64(i64::from(v))
     }
 
     /// The input contains an `i16`.
     ///
-    /// The default implementation fails with a type error.
+    /// The default implementation forwards to [`Visitor::visit_i64()`].
     ///
     /// # Errors
     ///
@@ -541,12 +509,12 @@ pub trait Visitor<'de>: Sized {
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::NegI16(v), &self))
+        self.visit_i64(i64::from(v))
     }
 
     /// The input contains an `i32`.
     ///
-    /// The default implementation fails with a type error.
+    /// The default implementation forwards to [`Visitor::visit_i64()`].
     ///
     /// # Errors
     ///
@@ -556,7 +524,7 @@ pub trait Visitor<'de>: Sized {
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::NegI32(v), &self))
+        self.visit_i64(i64::from(v))
     }
 
     /// The input contains an `i64`.
@@ -567,11 +535,11 @@ pub trait Visitor<'de>: Sized {
     ///
     /// Any error encountered during decoding or when creating the `Self::Value`
     /// type can be returned.
-    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+    fn visit_i64<E>(self, _v: i64) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::NegI64(v), &self))
+        Err(Error::invalid_type(Unexpected::NegInt, &self))
     }
 
     /// The input contains an `i128`.
@@ -582,16 +550,16 @@ pub trait Visitor<'de>: Sized {
     ///
     /// Any error encountered during decoding or when creating the `Self::Value`
     /// type can be returned.
-    fn visit_i128<E>(self, v: i128) -> Result<Self::Value, E>
+    fn visit_i128<E>(self, _v: i128) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::NegI128(v), &self))
+        Err(Error::invalid_type(Unexpected::NegInt, &self))
     }
 
     /// The input contains an `u8`.
     ///
-    /// The default implementation fails with a type error.
+    /// The default implementation forwards to [`Visitor::visit_u64()`].
     ///
     /// # Errors
     ///
@@ -601,12 +569,12 @@ pub trait Visitor<'de>: Sized {
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::UnsignedU8(v), &self))
+        self.visit_u64(u64::from(v))
     }
 
     /// The input contains an `u16`.
     ///
-    /// The default implementation fails with a type error.
+    /// The default implementation forwards to [`Visitor::visit_u64()`].
     ///
     /// # Errors
     ///
@@ -616,12 +584,12 @@ pub trait Visitor<'de>: Sized {
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::UnsignedU16(v), &self))
+        self.visit_u64(u64::from(v))
     }
 
     /// The input contains an `u32`.
     ///
-    /// The default implementation fails with a type error.
+    /// The default implementation forwards to [`Visitor::visit_u64()`].
     ///
     /// # Errors
     ///
@@ -631,7 +599,7 @@ pub trait Visitor<'de>: Sized {
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::UnsignedU32(v), &self))
+        self.visit_u64(u64::from(v))
     }
 
     /// The input contains an `u64`.
@@ -642,11 +610,11 @@ pub trait Visitor<'de>: Sized {
     ///
     /// Any error encountered during decoding or when creating the `Self::Value`
     /// type can be returned.
-    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    fn visit_u64<E>(self, _v: u64) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::UnsignedU64(v), &self))
+        Err(Error::invalid_type(Unexpected::Int, &self))
     }
 
     /// The input contains an `u128`.
@@ -657,62 +625,11 @@ pub trait Visitor<'de>: Sized {
     ///
     /// Any error encountered during decoding or when creating the `Self::Value`
     /// type can be returned.
-    fn visit_u128<E>(self, v: u128) -> Result<Self::Value, E>
+    fn visit_u128<E>(self, _v: u128) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::UnsignedU128(v), &self))
-    }
-
-    /// The input contains a string. The lifetime of the string is ephemeral and
-    /// it may be destroyed after this method returns.
-    ///
-    /// This method allows the `Decoder` to avoid a copy by retaining ownership
-    /// of any buffered data.
-    ///
-    /// # Errors
-    ///
-    /// Any error encountered during decoding or when creating the `Self::Value`
-    /// type can be returned.
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        Err(Error::invalid_type(Unexpected::Str(v), &self))
-    }
-
-    /// The input contains a string that lives at least as long as the
-    /// `Decoder`.
-    ///
-    /// This enables zero-copy deserialization of strings in some formats.
-    ///
-    /// The default implementation forwards to `visit_str`.
-    ///
-    /// # Errors
-    ///
-    /// Any error encountered during decoding or when creating the `Self::Value`
-    /// type can be returned.
-    #[inline]
-    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
-    where
-        E: Error,
-    {
-        self.visit_str(v)
-    }
-
-    /// The input contains an indefinite string value.
-    ///
-    /// The default implementation fails with a type error.
-    ///
-    /// # Errors
-    ///
-    /// Any error encountered during decoding or when creating the `Self::Value`
-    /// type can be returned.
-    fn visit_indefinite_len_str<A>(self, _b: A) -> Result<Self::Value, A::Error>
-    where
-        A: IndefiniteLenItemAccess<'de>,
-    {
-        Err(Error::invalid_type(Unexpected::Str(""), &self))
+        Err(Error::invalid_type(Unexpected::Int, &self))
     }
 
     /// The input contains a byte array. The lifetime of the byte array is
@@ -725,11 +642,11 @@ pub trait Visitor<'de>: Sized {
     ///
     /// Any error encountered during decoding or when creating the `Self::Value`
     /// type can be returned.
-    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    fn visit_bytes<E>(self, _v: &[u8]) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::Bytes(v), &self))
+        Err(Error::invalid_type(Unexpected::Bytes, &self))
     }
 
     /// The input contains a byte array that lives at least as long as the
@@ -763,7 +680,58 @@ pub trait Visitor<'de>: Sized {
     where
         A: IndefiniteLenItemAccess<'de>,
     {
-        Err(Error::invalid_type(Unexpected::Bytes(&[]), &self))
+        Err(Error::invalid_type(Unexpected::IndefiniteLenBytes, &self))
+    }
+
+    /// The input contains a string. The lifetime of the string is ephemeral and
+    /// it may be destroyed after this method returns.
+    ///
+    /// This method allows the `Decoder` to avoid a copy by retaining ownership
+    /// of any buffered data.
+    ///
+    /// # Errors
+    ///
+    /// Any error encountered during decoding or when creating the `Self::Value`
+    /// type can be returned.
+    fn visit_str<E>(self, _v: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Err(Error::invalid_type(Unexpected::Str, &self))
+    }
+
+    /// The input contains a string that lives at least as long as the
+    /// `Decoder`.
+    ///
+    /// This enables zero-copy deserialization of strings in some formats.
+    ///
+    /// The default implementation forwards to [`Visitor::visit_str()`].
+    ///
+    /// # Errors
+    ///
+    /// Any error encountered during decoding or when creating the `Self::Value`
+    /// type can be returned.
+    #[inline]
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        self.visit_str(v)
+    }
+
+    /// The input contains an indefinite string value.
+    ///
+    /// The default implementation fails with a type error.
+    ///
+    /// # Errors
+    ///
+    /// Any error encountered during decoding or when creating the `Self::Value`
+    /// type can be returned.
+    fn visit_indefinite_len_str<A>(self, _b: A) -> Result<Self::Value, A::Error>
+    where
+        A: IndefiniteLenItemAccess<'de>,
+    {
+        Err(Error::invalid_type(Unexpected::IndefiniteLenStr, &self))
     }
 
     /// The input contains an array of elements.
@@ -838,7 +806,7 @@ pub trait Visitor<'de>: Sized {
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::F32(v), &self))
+        self.visit_f64(f64::from(v))
     }
 
     /// The input contains a `f64`.
@@ -849,11 +817,11 @@ pub trait Visitor<'de>: Sized {
     ///
     /// Any error encountered during decoding or when creating the `Self::Value`
     /// type can be returned.
-    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+    fn visit_f64<E>(self, _v: f64) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Err(Error::invalid_type(Unexpected::F64(v), &self))
+        Err(Error::invalid_type(Unexpected::Float, &self))
     }
 
     /// The input is equivalent to `None`.
@@ -872,7 +840,7 @@ pub trait Visitor<'de>: Sized {
     }
 }
 
-/// Provides a [`Visitor`] access to each part of an indefinite length item in
+/// Provides a [`Visitor`] access to each chunk of an indefinite length item in
 /// the input.
 ///
 /// This is a trait that a [`Decoder`] passes to a [`Visitor`] implementation,
@@ -891,7 +859,7 @@ pub trait IndefiniteLenItemAccess<'de> {
     type Error: Error;
 
     /// Returns `Ok(Some(value))` for the next chunk of the item, or `Ok(None)`
-    /// if there are no more remaining parts.
+    /// if there are no more remaining chunks.
     ///
     /// # Errors
     ///
@@ -900,7 +868,7 @@ pub trait IndefiniteLenItemAccess<'de> {
     where
         T: DecodeSeed<'de>;
 
-    /// Returns `Ok(Some(value))` for the next value in the list, or `Ok(None)`
+    /// Returns `Ok(Some(value))` for the next chunk of the item, or `Ok(None)`
     /// if there are no more remaining chunks.
     ///
     /// This method exists as a convenience for `Decode` implementations.

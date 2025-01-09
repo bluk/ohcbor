@@ -37,10 +37,7 @@ where
     /// source.
     pub(crate) fn end(&mut self) -> Result<(), crate::Error> {
         match self.read.peek() {
-            Some(r) => r.and(Err(crate::Error::new(
-                ErrorKind::TrailingData,
-                self.read.byte_offset(),
-            ))),
+            Some(r) => r.and(Err(crate::Error::new(ErrorKind::TrailingData))),
             None => Ok(()),
         }
     }
@@ -48,10 +45,7 @@ where
     fn on_end_remaining(&mut self, remaining: Option<usize>) -> Result<(), crate::Error> {
         if let Some(remaining) = remaining {
             if 0 < remaining {
-                Err(crate::Error::new(
-                    ErrorKind::TrailingData,
-                    self.read.byte_offset(),
-                ))
+                Err(crate::Error::new(ErrorKind::TrailingData))
             } else {
                 Ok(())
             }
@@ -61,26 +55,23 @@ where
                     self.parse_next()?;
                     Ok(())
                 }
-                _ => Err(crate::Error::new(
-                    ErrorKind::TrailingData,
-                    self.read.byte_offset(),
-                )),
+                _ => Err(crate::Error::new(ErrorKind::TrailingData)),
             }
         }
     }
 
     #[inline]
     fn parse_peek(&mut self) -> Result<u8, crate::Error> {
-        self.read.peek().ok_or_else(|| {
-            crate::Error::new(ErrorKind::EofWhileParsingValue, self.read.byte_offset())
-        })?
+        self.read
+            .peek()
+            .ok_or_else(|| crate::Error::new(ErrorKind::EofWhileParsingValue))?
     }
 
     #[inline]
     fn parse_next(&mut self) -> Result<u8, crate::Error> {
-        self.read.next().ok_or_else(|| {
-            crate::Error::new(ErrorKind::EofWhileParsingValue, self.read.byte_offset())
-        })?
+        self.read
+            .next()
+            .ok_or_else(|| crate::Error::new(ErrorKind::EofWhileParsingValue))?
     }
 }
 
@@ -122,7 +113,7 @@ where
                         let val = self.read.parse_u64()?;
                         visitor.visit_u64(val)
                     }
-                    28..=31 => Err(Error::malformed(self.read.byte_offset())),
+                    28..=31 => Err(Error::malformed()),
                     _ => {
                         unreachable!()
                     }
@@ -184,7 +175,7 @@ where
                             visitor.visit_i128(-1 - i128::from(val))
                         }
                     }
-                    28..=31 => Err(Error::malformed(self.read.byte_offset())),
+                    28..=31 => Err(Error::malformed()),
                     _ => {
                         unreachable!()
                     }
@@ -214,17 +205,11 @@ where
                     match self.read.read_exact(len, &mut self.buf)? {
                         Ref::Source(bytes) => match core::str::from_utf8(bytes) {
                             Ok(s) => visitor.visit_borrowed_str(s),
-                            Err(e) => Err(crate::Error::new(
-                                ErrorKind::InvalidUtf8Error(e),
-                                self.read.byte_offset(),
-                            )),
+                            Err(e) => Err(crate::Error::new(ErrorKind::InvalidUtf8Error(e))),
                         },
                         Ref::Buffer(bytes) => match core::str::from_utf8(bytes.as_slice()) {
                             Ok(s) => visitor.visit_str(s),
-                            Err(e) => Err(crate::Error::new(
-                                ErrorKind::InvalidUtf8Error(e),
-                                self.read.byte_offset(),
-                            )),
+                            Err(e) => Err(crate::Error::new(ErrorKind::InvalidUtf8Error(e))),
                         },
                     }
                 } else {
@@ -280,7 +265,7 @@ where
                         u64::from(val)
                     }
                     27 => self.read.parse_u64()?,
-                    28..=31 => return Err(Error::malformed(self.read.byte_offset())),
+                    28..=31 => return Err(Error::malformed()),
                     _ => {
                         unreachable!()
                     }
@@ -302,7 +287,7 @@ where
                     24 => {
                         let val = self.parse_next()?;
                         if val < 32 {
-                            Err(Error::malformed(self.read.byte_offset()))
+                            Err(Error::malformed())
                         } else {
                             visitor.visit_simple(Simple::from(val))
                         }
@@ -322,7 +307,7 @@ where
                         let val = f64::from_be_bytes(self.read.read_arr()?);
                         visitor.visit_f64(val)
                     }
-                    28..=31 => Err(Error::malformed(self.read.byte_offset())),
+                    28..=31 => Err(Error::malformed()),
                     _ => {
                         unreachable!()
                     }
