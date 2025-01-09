@@ -361,93 +361,93 @@ macro_rules! uint_to_self {
 }
 
 impl_decode_num! {
-u8, NonZeroU8,
-num_self!(u8:visit_u8);
-int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
-uint_to_self!(u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
+    u8, NonZeroU8,
+    num_self!(u8:visit_u8);
+    int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
+    uint_to_self!(u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
 }
 
 impl_decode_num! {
-u16, NonZeroU16,
-num_self!(u16:visit_u16);
-num_as_self!(u8:visit_u8);
-int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
-uint_to_self!(u32:visit_u32 u64:visit_u64 u128:visit_u128);
+    u16, NonZeroU16,
+    num_self!(u16:visit_u16);
+    num_as_self!(u8:visit_u8);
+    int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
+    uint_to_self!(u32:visit_u32 u64:visit_u64 u128:visit_u128);
 }
 
 impl_decode_num! {
-u32, NonZeroU32,
-num_self!(u32:visit_u32);
-num_as_self!(u8:visit_u8 u16:visit_u16);
-int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
-uint_to_self!(u64:visit_u64 u128:visit_u128);
+    u32, NonZeroU32,
+    num_self!(u32:visit_u32);
+    num_as_self!(u8:visit_u8 u16:visit_u16);
+    int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
+    uint_to_self!(u64:visit_u64 u128:visit_u128);
 }
 
 impl_decode_num! {
-u64, NonZeroU64,
-num_self!(u64:visit_u64);
-num_as_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32);
-int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
-uint_to_self!(u128:visit_u128);
+    u64, NonZeroU64,
+    num_self!(u64:visit_u64);
+    num_as_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32);
+    int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
+    uint_to_self!(u128:visit_u128);
 }
 
 impl_decode_num! {
-u128, NonZeroU128,
-num_self!(u128:visit_u128);
-num_as_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64);
-int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
+    u128, NonZeroU128,
+    num_self!(u128:visit_u128);
+    num_as_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64);
+    int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
 }
 
 impl_decode_num! {
-usize, NonZeroUsize,
-num_as_self!(u8:visit_u8 u16:visit_u16);
-int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
-uint_to_self!(u32:visit_u32 u64:visit_u64 u128:visit_u128);
+    usize, NonZeroUsize,
+    num_as_self!(u8:visit_u8 u16:visit_u16);
+    int_to_uint!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
+    uint_to_self!(u32:visit_u32 u64:visit_u64 u128:visit_u128);
 }
 
 impl_decode_num! {
-i8, NonZeroI8,
-num_self!(i8:visit_i8);
-int_to_int!(i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
-uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
+    i8, NonZeroI8,
+    num_self!(i8:visit_i8);
+    int_to_int!(i16:visit_i16 i32:visit_i32 i64:visit_i64 i128:visit_i128);
+    uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
 }
 
 impl_decode_num! {
-i16, NonZeroI16,
-num_self!(i16:visit_i16);
-num_as_self!(i8:visit_i8);
-int_to_int!(i32:visit_i32 i64:visit_i64 i128:visit_i128);
-uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
+    i16, NonZeroI16,
+    num_self!(i16:visit_i16);
+    num_as_self!(i8:visit_i8);
+    int_to_int!(i32:visit_i32 i64:visit_i64 i128:visit_i128);
+    uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
 }
 
 impl_decode_num! {
-i32, NonZeroI32,
-num_self!(i32:visit_i32);
-num_as_self!(i8:visit_i8 i16:visit_i16);
-int_to_int!(i64:visit_i64 i128:visit_i128);
-uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
+    i32, NonZeroI32,
+    num_self!(i32:visit_i32);
+    num_as_self!(i8:visit_i8 i16:visit_i16);
+    int_to_int!(i64:visit_i64 i128:visit_i128);
+    uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
 }
 
 impl_decode_num! {
-i64, NonZeroI64,
-num_self!(i64:visit_i64);
-num_as_self!(i8:visit_i8 i16:visit_i16 i32:visit_i32);
-int_to_int!(i128:visit_i128);
-uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
+    i64, NonZeroI64,
+    num_self!(i64:visit_i64);
+    num_as_self!(i8:visit_i8 i16:visit_i16 i32:visit_i32);
+    int_to_int!(i128:visit_i128);
+    uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
 }
 
 impl_decode_num! {
-i128, NonZeroI128,
-num_self!(i128:visit_i128);
-num_as_self!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64);
-uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
+    i128, NonZeroI128,
+    num_self!(i128:visit_i128);
+    num_as_self!(i8:visit_i8 i16:visit_i16 i32:visit_i32 i64:visit_i64);
+    uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
 }
 
 impl_decode_num! {
-isize, NonZeroIsize,
-num_as_self!(i8:visit_i8 i16:visit_i16);
-int_to_int!(i32:visit_i32 i64:visit_i64 i128:visit_i128);
-uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
+    isize, NonZeroIsize,
+    num_as_self!(i8:visit_i8 i16:visit_i16);
+    int_to_int!(i32:visit_i32 i64:visit_i64 i128:visit_i128);
+    uint_to_self!(u8:visit_u8 u16:visit_u16 u32:visit_u32 u64:visit_u64 u128:visit_u128);
 }
 
 impl_decode_num! {
@@ -510,7 +510,7 @@ impl<'de> Decode<'de> for String {
                             type Value = ();
 
                             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                                f.write_str("byte string")
+                                f.write_str("a byte string")
                             }
 
                             fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
@@ -562,7 +562,7 @@ impl<'de> Decode<'de> for String {
                             type Value = ();
 
                             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                                f.write_str("text string")
+                                f.write_str("a text string")
                             }
 
                             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -638,7 +638,7 @@ impl<'de> Decode<'de> for String {
                             type Value = ();
 
                             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                                f.write_str("byte string")
+                                f.write_str("a byte string")
                             }
 
                             fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
@@ -696,7 +696,7 @@ impl<'de> Decode<'de> for String {
                             type Value = ();
 
                             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                                f.write_str("text string")
+                                f.write_str("a text string")
                             }
 
                             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -835,7 +835,7 @@ where
             type Value = Option<T>;
 
             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("option")
+                f.write_str("an option")
             }
 
             fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>

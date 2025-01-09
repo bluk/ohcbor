@@ -71,7 +71,7 @@ where
             type Value = Tag<T>;
 
             fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                f.write_str("tag")
+                f.write_str("a tag")
             }
 
             fn visit_tag<D>(self, tag_num: Num, decoder: D) -> Result<Self::Value, D::Error>

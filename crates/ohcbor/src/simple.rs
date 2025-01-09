@@ -113,7 +113,7 @@ impl<'de> Decode<'de> for Simple {
             type Value = Simple;
 
             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("simple value")
+                f.write_str("a simple value")
             }
 
             fn visit_simple<E>(self, v: Simple) -> Result<Self::Value, E>

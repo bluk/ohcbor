@@ -108,7 +108,7 @@ impl<'de> Decode<'de> for ByteString {
             type Value = ByteString;
 
             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("byte string")
+                f.write_str("a byte string")
             }
 
             fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
@@ -137,7 +137,7 @@ impl<'de> Decode<'de> for ByteString {
                             type Value = ();
 
                             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                                f.write_str("byte string")
+                                f.write_str("a byte string")
                             }
 
                             fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
@@ -188,7 +188,7 @@ impl<'de> Decode<'de> for ByteString {
                             type Value = ();
 
                             fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                                f.write_str("text string")
+                                f.write_str("a text string")
                             }
 
                             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
