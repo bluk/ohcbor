@@ -11,7 +11,7 @@ use crate::{
     decode::{ArrAccess, DecodeSeed, Decoder, Error as _, IntoDecoder, MapAccess, Visitor},
     error::Error,
     value::{Int, Value},
-    Tag, NEG_INT_MIN,
+    Tag,
 };
 
 impl<'de> Decoder<'de> for Value {
@@ -25,8 +25,10 @@ impl<'de> Decoder<'de> for Value {
             Value::ByteStr(s) => visitor.visit_bytes(&s.into_vec()),
             Value::Int(n) => match n {
                 Int::Pos(v) => visitor.visit_u64(v),
-                Int::Neg(v) => visitor.visit_i64(v),
-                Int::NegMin => visitor.visit_i128(NEG_INT_MIN),
+                Int::Neg(v) => {
+                    let v = -1i128 - i128::from(v);
+                    visitor.visit_i128(v)
+                }
             },
             Value::Array(a) => {
                 let len = a.len();
@@ -160,8 +162,10 @@ impl<'de> Decoder<'de> for &'de Value {
             Value::ByteStr(bytes) => visitor.visit_borrowed_bytes(bytes),
             Value::Int(n) => match n {
                 Int::Pos(v) => visitor.visit_u64(*v),
-                Int::Neg(v) => visitor.visit_i64(*v),
-                Int::NegMin => visitor.visit_i128(NEG_INT_MIN),
+                Int::Neg(v) => {
+                    let v = -1i128 - i128::from(*v);
+                    visitor.visit_i128(v)
+                }
             },
             Value::Array(a) => {
                 let len = a.len();

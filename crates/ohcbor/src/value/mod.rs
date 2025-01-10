@@ -1,6 +1,6 @@
 //! Represents CBOR data.
 
-use core::fmt::Display;
+use core::{fmt::Display, num::TryFromIntError};
 
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::{boxed::Box, collections::BTreeMap, fmt, str, str::FromStr, string::String, vec::Vec};
@@ -10,10 +10,12 @@ use std::{boxed::Box, collections::BTreeMap, fmt, str, str::FromStr, string::Str
 use ordered_float::OrderedFloat;
 
 use crate::{
-    decode::{Decode, DecodeOwned, DecodeSeed, Decoder, IndefiniteLenItemAccess, Visitor},
+    decode::{
+        Decode, DecodeOwned, DecodeSeed, Decoder, IndefiniteLenItemAccess, Unexpected, Visitor,
+    },
     encode::{Encode, Encoder},
     error::Error,
-    ByteString, Simple, Tag, NEG_INT_MIN,
+    ByteString, Simple, Tag,
 };
 
 /// Integer value
@@ -22,17 +24,21 @@ pub enum Int {
     /// Positive value
     Pos(u64),
     /// Negative value
-    Neg(i64),
-    /// Maximum negative integer value (`-2^64`)
-    NegMin,
+    ///
+    /// # Important
+    ///
+    /// To calculate the real value: (-1 - u64 value)
+    Neg(u64),
 }
 
 impl Display for Int {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Pos(v) => Display::fmt(v, f),
-            Self::Neg(v) => Display::fmt(v, f),
-            Self::NegMin => Display::fmt(&NEG_INT_MIN, f),
+            Self::Neg(v) => {
+                let v: i128 = -1 - i128::from(*v);
+                Display::fmt(&v, f)
+            }
         }
     }
 }
@@ -61,10 +67,27 @@ impl From<u64> for Int {
     }
 }
 
+impl TryFrom<u128> for Int {
+    type Error = TryFromIntError;
+
+    fn try_from(v: u128) -> Result<Self, Self::Error> {
+        u64::try_from(v).map(Int::Pos)
+    }
+}
+
+impl TryFrom<usize> for Int {
+    type Error = TryFromIntError;
+
+    fn try_from(v: usize) -> Result<Self, Self::Error> {
+        u64::try_from(v).map(Int::Pos)
+    }
+}
+
 impl From<i8> for Int {
     fn from(v: i8) -> Self {
         if v < 0 {
-            Int::Neg(i64::from(v))
+            let v = v + 1;
+            Int::Neg(u64::try_from(v.abs()).expect("value should be positive"))
         } else {
             Int::Pos(u64::try_from(v).expect("int is not positive"))
         }
@@ -74,7 +97,8 @@ impl From<i8> for Int {
 impl From<i16> for Int {
     fn from(v: i16) -> Self {
         if v < 0 {
-            Int::Neg(i64::from(v))
+            let v = v + 1;
+            Int::Neg(u64::try_from(v.abs()).expect("value should be positive"))
         } else {
             Int::Pos(u64::try_from(v).expect("int is not positive"))
         }
@@ -84,7 +108,8 @@ impl From<i16> for Int {
 impl From<i32> for Int {
     fn from(v: i32) -> Self {
         if v < 0 {
-            Int::Neg(i64::from(v))
+            let v = v + 1;
+            Int::Neg(u64::try_from(v.abs()).expect("value should be positive"))
         } else {
             Int::Pos(u64::try_from(v).expect("int is not positive"))
         }
@@ -94,9 +119,36 @@ impl From<i32> for Int {
 impl From<i64> for Int {
     fn from(v: i64) -> Self {
         if v < 0 {
-            Int::Neg(v)
+            let v = v + 1;
+            Int::Neg(u64::try_from(v.abs()).expect("value should be positive"))
         } else {
             Int::Pos(u64::try_from(v).expect("int is not positive"))
+        }
+    }
+}
+
+impl TryFrom<i128> for Int {
+    type Error = TryFromIntError;
+
+    fn try_from(v: i128) -> Result<Self, Self::Error> {
+        if v < 0 {
+            let v = v + 1;
+            u64::try_from(v.abs()).map(Int::Neg)
+        } else {
+            u64::try_from(v).map(Int::Pos)
+        }
+    }
+}
+
+impl TryFrom<isize> for Int {
+    type Error = TryFromIntError;
+
+    fn try_from(v: isize) -> Result<Self, Self::Error> {
+        if v < 0 {
+            let v = v + 1;
+            u64::try_from(v.abs()).map(Int::Neg)
+        } else {
+            u64::try_from(v).map(Int::Pos)
         }
     }
 }
@@ -108,8 +160,11 @@ impl Encode for Int {
     {
         match self {
             Int::Pos(v) => encoder.encode_u64(*v),
-            Int::Neg(v) => encoder.encode_i64(*v),
-            Int::NegMin => encoder.encode_i128(NEG_INT_MIN),
+            Int::Neg(v) => {
+                let v = i128::from(*v);
+                let v = -1 - v;
+                encoder.encode_i128(v)
+            }
         }
     }
 }
@@ -226,7 +281,11 @@ impl Value {
     #[must_use]
     pub fn as_i64(&self) -> Option<i64> {
         match self {
-            Value::Int(Int::Neg(n)) => Some(*n),
+            Value::Int(Int::Neg(n)) => {
+                let v = i128::from(*n);
+                let v = -1 - v;
+                i64::try_from(v).ok()
+            }
             _ => None,
         }
     }
@@ -368,43 +427,59 @@ impl From<u64> for Value {
     }
 }
 
+impl TryFrom<u128> for Value {
+    type Error = TryFromIntError;
+
+    fn try_from(v: u128) -> Result<Self, Self::Error> {
+        Int::try_from(v).map(Value::Int)
+    }
+}
+
+impl TryFrom<usize> for Value {
+    type Error = TryFromIntError;
+
+    fn try_from(v: usize) -> Result<Self, Self::Error> {
+        Int::try_from(v).map(Value::Int)
+    }
+}
+
 impl From<i8> for Value {
     fn from(v: i8) -> Self {
-        if v < 0 {
-            Value::Int(Int::Neg(i64::from(v)))
-        } else {
-            Value::Int(Int::Pos(u64::try_from(v).expect("int is not positive")))
-        }
+        Value::Int(Int::from(v))
     }
 }
 
 impl From<i16> for Value {
     fn from(v: i16) -> Self {
-        if v < 0 {
-            Value::Int(Int::Neg(i64::from(v)))
-        } else {
-            Value::Int(Int::Pos(u64::try_from(v).expect("int is not positive")))
-        }
+        Value::Int(Int::from(v))
     }
 }
 
 impl From<i32> for Value {
     fn from(v: i32) -> Self {
-        if v < 0 {
-            Value::Int(Int::Neg(i64::from(v)))
-        } else {
-            Value::Int(Int::Pos(u64::try_from(v).expect("int is not positive")))
-        }
+        Value::Int(Int::from(v))
     }
 }
 
 impl From<i64> for Value {
     fn from(v: i64) -> Self {
-        if v < 0 {
-            Value::Int(Int::Neg(v))
-        } else {
-            Value::Int(Int::Pos(u64::try_from(v).expect("int is not positive")))
-        }
+        Value::Int(Int::from(v))
+    }
+}
+
+impl TryFrom<i128> for Value {
+    type Error = TryFromIntError;
+
+    fn try_from(v: i128) -> Result<Self, Self::Error> {
+        Int::try_from(v).map(Value::Int)
+    }
+}
+
+impl TryFrom<isize> for Value {
+    type Error = TryFromIntError;
+
+    fn try_from(v: isize) -> Result<Self, Self::Error> {
+        Int::try_from(v).map(Value::Int)
     }
 }
 
@@ -440,6 +515,12 @@ impl From<Vec<u8>> for Value {
     }
 }
 
+impl From<ByteString> for Value {
+    fn from(other: ByteString) -> Value {
+        Value::ByteStr(other)
+    }
+}
+
 impl<K: Into<Value>, V: Into<Value>> From<BTreeMap<K, V>> for Value {
     fn from(other: BTreeMap<K, V>) -> Value {
         Value::Map(
@@ -448,6 +529,12 @@ impl<K: Into<Value>, V: Into<Value>> From<BTreeMap<K, V>> for Value {
                 .map(|(k, v)| (k.into(), v.into()))
                 .collect(),
         )
+    }
+}
+
+impl From<Simple> for Value {
+    fn from(other: Simple) -> Value {
+        Value::Simple(other)
     }
 }
 
@@ -494,11 +581,12 @@ impl<'de> Decode<'de> for Value {
             where
                 E: crate::decode::Error,
             {
-                if 0 <= v {
-                    Ok(Value::Int(Int::Pos(
-                        u64::try_from(v).expect("value should be positive"),
-                    )))
+                if let Ok(v) = u64::try_from(v) {
+                    Ok(Value::Int(Int::Pos(v)))
                 } else {
+                    let v = v + 1;
+                    let v = v.abs();
+                    let v = u64::try_from(v).expect("value should be positive");
                     Ok(Value::Int(Int::Neg(v)))
                 }
             }
@@ -507,17 +595,18 @@ impl<'de> Decode<'de> for Value {
             where
                 E: crate::decode::Error,
             {
-                if v == NEG_INT_MIN {
-                    Ok(Value::Int(Int::NegMin))
-                } else if let Ok(v) = u64::try_from(v) {
+                if let Ok(v) = u64::try_from(v) {
                     Ok(Value::Int(Int::Pos(v)))
-                } else if let Ok(v) = i64::try_from(v) {
-                    Ok(Value::Int(Int::Neg(v)))
                 } else {
-                    Err(crate::decode::Error::invalid_value(
-                        crate::decode::Unexpected::NegInt,
-                        &self,
-                    ))
+                    let v = v + 1;
+                    let v = v.abs();
+                    let v = u64::try_from(v).map_err(|_| {
+                        crate::decode::Error::invalid_value(
+                            Unexpected::NegInt,
+                            &"value greater than or equal to -2^64",
+                        )
+                    })?;
+                    Ok(Value::Int(Int::Neg(v)))
                 }
             }
 
@@ -535,10 +624,7 @@ impl<'de> Decode<'de> for Value {
                 if let Ok(v) = u64::try_from(v) {
                     Ok(Value::Int(Int::Pos(v)))
                 } else {
-                    Err(crate::decode::Error::invalid_value(
-                        crate::decode::Unexpected::Int,
-                        &self,
-                    ))
+                    Err(crate::decode::Error::invalid_value(Unexpected::Int, &self))
                 }
             }
 
@@ -789,4 +875,267 @@ where
     T: ?Sized + Encode,
 {
     value.encode(enc::Encoder)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{from_slice, tag, value::Value, Simple, Tag};
+
+    #[cfg(all(feature = "alloc", not(feature = "std")))]
+    use alloc::{boxed::Box, collections::BTreeMap, string::String, vec::Vec};
+    #[cfg(feature = "std")]
+    use std::{boxed::Box, collections::BTreeMap, string::String, vec::Vec};
+
+    #[cfg(any(feature = "alloc", feature = "std"))]
+    use crate::{to_vec, ByteString};
+
+    use proptest::prelude::*;
+
+    /// Maximum negative integer
+    const NEG_INT_MIN: i128 = -2i128.pow(64);
+
+    prop_compose! {
+        fn tag()(num in any::<tag::Num>(), content in any::<u64>()) -> Tag<u64> {
+            Tag::new(num, content)
+        }
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn test_u8(v in 0..=u8::MAX) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+
+        #[test]
+        fn test_u16(v in 0..=u16::MAX) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_u32(v in 0..=u32::MAX) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_u64(v in 0..=u64::MAX) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_u128(v in 0..=u128::from(u64::MAX)) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.try_into().unwrap());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_usize(v in 0..=usize::MAX) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.try_into().unwrap());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_i8(v in i8::MIN..=i8::MAX) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_i16(v in i16::MIN..=i16::MAX) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_i32(v in i32::MIN..=i32::MAX) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_i64(v in i64::MIN..=i64::MAX) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_i128(v in NEG_INT_MIN..=i128::from(u64::MAX)) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.try_into().unwrap());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_isize(v in isize::MIN..=isize::MAX) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.try_into().unwrap());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+
+        #[cfg(any(feature = "alloc", feature = "std"))]
+        #[test]
+        fn test_bytes(v in prop::collection::vec(u8::MIN..=u8::MAX, 0..256).prop_map(ByteString::from)) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.clone().into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice::<ByteString>(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_str(v in ".*") {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.clone().into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice::<&str>(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_arr(v in prop::collection::vec(i64::MIN..=i64::MAX, 0..256)) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , Value::Array(v.iter().map(|v| Value::from(*v)).collect::<Vec<_>>()));
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice::<Vec<i64>>(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_map(v in prop::collection::btree_map(".*", ".*", 0..256)) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.clone().into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice::<BTreeMap<String, String>>(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_tag(v in tag()) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            let cloned_tag = Tag::new(v.num(), Box::new(Value::from(*v.content())));
+            assert_eq!(decoded_value , Value::Tag(cloned_tag));
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice::<Tag<u64>>(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_simple_value_less_than_24(v in ((0..=23u8).prop_map(Simple::new))) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice::<Simple>(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[test]
+        fn test_simple_value_greater_than_31(v in ((32..=u8::MAX).prop_map(Simple::new))) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice::<Simple>(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[allow(clippy::float_cmp)]
+        #[test]
+        fn test_f32(v in any::<f32>()) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+
+        #[allow(clippy::float_cmp)]
+        #[test]
+        fn test_f64(v in any::<f64>()) {
+            let output = to_vec(&v)?;
+            let decoded_value = from_slice::<Value>(&output)?;
+            assert_eq!(decoded_value , v.into());
+
+            let value_output = to_vec(&decoded_value)?;
+            let decoded_v = from_slice(&value_output)?;
+            assert_eq!(v , decoded_v);
+        }
+    }
 }

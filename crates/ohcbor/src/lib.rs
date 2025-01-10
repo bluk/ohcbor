@@ -115,9 +115,6 @@ const ADDTL_INFO_MASK: u8 = 0b0001_1111;
 /// Break stop code for terminating indefinite length items
 const BREAK_CODE: u8 = 0b1111_1111;
 
-/// Maximum negative integer
-const NEG_INT_MIN: i128 = -2i128.pow(64);
-
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::vec::Vec;
 #[cfg(feature = "std")]

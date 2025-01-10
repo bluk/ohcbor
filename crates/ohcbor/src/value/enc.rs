@@ -11,7 +11,7 @@ use super::{Float, Int, Value};
 use crate::{
     encode::{self, Error as _},
     error::Error,
-    ByteString, Simple, Tag, NEG_INT_MIN,
+    ByteString, Simple, Tag,
 };
 
 pub(super) struct Encoder;
@@ -37,24 +37,25 @@ impl encode::Encoder for Encoder {
     }
 
     fn encode_i64(self, v: i64) -> Result<Self::Ok, Self::Error> {
-        if v < 0 {
-            Ok(Value::Int(Int::Neg(v)))
+        if let Ok(v) = u64::try_from(v) {
+            Ok(Value::Int(Int::Pos(v)))
         } else {
-            Ok(Value::Int(Int::Pos(
+            let v = v + 1;
+            let v = v.abs();
+            Ok(Value::Int(Int::Neg(
                 u64::try_from(v).expect("int is not positive"),
             )))
         }
     }
 
     fn encode_i128(self, v: i128) -> Result<Self::Ok, Self::Error> {
-        if v == NEG_INT_MIN {
-            Ok(Value::Int(Int::NegMin))
-        } else if let Ok(v) = u64::try_from(v) {
+        if let Ok(v) = u64::try_from(v) {
             Ok(Value::Int(Int::Pos(v)))
-        } else if let Ok(v) = i64::try_from(v) {
-            Ok(Value::Int(Int::Neg(v)))
         } else {
-            Err(Self::Error::invalid_value(v))
+            let neg_v = v + 1;
+            let neg_v = neg_v.abs();
+            let neg_v = u64::try_from(neg_v).map_err(|_| Error::invalid_value(v))?;
+            Ok(Value::Int(Int::Neg(neg_v)))
         }
     }
 
