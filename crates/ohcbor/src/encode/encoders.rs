@@ -604,12 +604,12 @@ mod tests {
         #[test]
         fn test_simple_value_less_than_24(v in ((0..=23u8).prop_map(Simple::new))) {
             let output = to_vec(&v)?;
+            let decoded_v = from_slice::<Simple>(&output)?;
+            assert_eq!(v, decoded_v);
+
             if v.is_null() {
                 let decoded_v = from_slice::<Option<u64>>(&output)?;
                 assert_eq!(None, decoded_v);
-            } else {
-                let decoded_v = from_slice::<Simple>(&output)?;
-                assert_eq!(v, decoded_v);
             }
         }
 

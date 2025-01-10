@@ -122,6 +122,13 @@ impl<'de> Decode<'de> for Simple {
             {
                 Ok(v)
             }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: decode::Error,
+            {
+                Ok(Simple::NULL)
+            }
         }
 
         decoder.decode_any(SimpleVisitor)
