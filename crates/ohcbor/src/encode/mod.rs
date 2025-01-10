@@ -96,6 +96,8 @@
 //! [serde_serialize]: https://docs.rs/serde/latest/serde/trait.Serialize.html
 //! [serde_serializer]: https://docs.rs/serde/latest/serde/ser/trait.Serializer.html
 
+use core::fmt;
+
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 use alloc::string::ToString;
 #[cfg(feature = "std")]
@@ -105,7 +107,6 @@ use crate::{ErrorKind, Simple};
 
 #[cfg(any(feature = "alloc", feature = "std"))]
 pub(crate) mod encoders;
-mod fmt;
 mod impls;
 mod impossible;
 
@@ -122,21 +123,14 @@ pub trait Error: Sized + core::error::Error {
     /// period.
     fn custom<T>(msg: T) -> Self
     where
-        T: core::fmt::Display;
+        T: fmt::Display;
 
     /// Raised when a [`Encode`] receives a value of the right type but that
     /// is wrong for some other reason.
-    ///
-    /// The `unexp` argument provides information about what value was received.
-    /// This is the value that was present in the input file or other source
-    /// data of the [`Decoder`].
-    ///
-    /// The `exp` argument provides information about what value was being
-    /// expected. This is the type that is written in the program.
     #[cold]
     fn invalid_value<T>(v: T) -> Self
     where
-        T: core::fmt::Display,
+        T: fmt::Display,
     {
         Error::custom(format_args!("invalid value: {v}"))
     }
@@ -145,9 +139,9 @@ pub trait Error: Sized + core::error::Error {
 impl Error for crate::Error {
     fn custom<T>(msg: T) -> Self
     where
-        T: core::fmt::Display,
+        T: fmt::Display,
     {
-        crate::Error::new(ErrorKind::Decode(msg.to_string()))
+        crate::Error::new(ErrorKind::Encode(msg.to_string()))
     }
 }
 
@@ -232,14 +226,14 @@ pub trait Encoder: Sized {
     ///
     /// The argument is the number of elements in the array, which may or may
     /// not be computable before the array is iterated.
-    fn encode_arr(self, len: Option<usize>) -> Result<Self::EncodeArr, Self::Error>;
+    fn encode_arr(self, len: Option<u64>) -> Result<Self::EncodeArr, Self::Error>;
 
     /// Begin to encode a map. This call must be followed by zero or more
     /// calls to `encode_key` and `encode_value`, then a call to `end`.
     ///
     /// The argument is the number of elements in the map, which may or may not
     /// be computable before the map is iterated.
-    fn encode_map(self, len: Option<usize>) -> Result<Self::EncodeMap, Self::Error>;
+    fn encode_map(self, len: Option<u64>) -> Result<Self::EncodeMap, Self::Error>;
 
     /// Encode a tag.
     fn encode_tag<T>(self, tag_num: u64, v: &T) -> Result<Self::Ok, Self::Error>
@@ -301,7 +295,7 @@ pub trait Encoder: Sized {
     #[cfg(any(feature = "std", feature = "alloc"))]
     fn collect_str<T>(self, value: &T) -> Result<Self::Ok, Self::Error>
     where
-        T: ?Sized + core::fmt::Display,
+        T: ?Sized + fmt::Display,
     {
         self.encode_str(&value.to_string())
     }
@@ -392,12 +386,12 @@ pub trait EncodeMap {
     fn end(self) -> Result<Self::Ok, Self::Error>;
 }
 
-fn iterator_len_hint<I>(iter: &I) -> Option<usize>
+fn iterator_len_hint<I>(iter: &I) -> Option<u64>
 where
     I: Iterator,
 {
     match iter.size_hint() {
-        (lo, Some(hi)) if lo == hi => Some(lo),
+        (lo, Some(hi)) if lo == hi => u64::try_from(lo).ok(),
         _ => None,
     }
 }

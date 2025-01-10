@@ -90,13 +90,18 @@ impl encode::Encoder for Encoder {
         Ok(Value::ByteStr(ByteString::from(v)))
     }
 
-    fn encode_arr(self, len: Option<usize>) -> Result<Self::EncodeArr, Self::Error> {
+    fn encode_arr(self, len: Option<u64>) -> Result<Self::EncodeArr, Self::Error> {
         Ok(EncodeArr {
-            arr: Vec::with_capacity(len.unwrap_or(0)),
+            arr: Vec::with_capacity(
+                usize::try_from(len.unwrap_or(0))
+                    .map_err(|_| Self::Error::custom("len is greater than usize::MAX"))?,
+            ),
         })
     }
 
-    fn encode_map(self, _len: Option<usize>) -> Result<Self::EncodeMap, Self::Error> {
+    fn encode_map(self, len: Option<u64>) -> Result<Self::EncodeMap, Self::Error> {
+        let _ = usize::try_from(len.unwrap_or(0))
+            .map_err(|_| Self::Error::custom("len is greater than usize::MAX"))?;
         Ok(EncodeMap {
             map: BTreeMap::new(),
             current_key: None,

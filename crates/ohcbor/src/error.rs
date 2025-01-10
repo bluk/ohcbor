@@ -111,8 +111,6 @@ pub enum ErrorKind {
     Encode(String),
     /// Data is not well formed.
     NotWellFormed,
-    /// Length argument is not a valid number
-    InvalidLen,
     /// Invalid UTF-8
     InvalidUtf8Error(Utf8Error),
 }
@@ -126,7 +124,6 @@ impl Display for ErrorKind {
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => Display::fmt(source, f),
             ErrorKind::NotWellFormed => f.write_str("data is not well formed"),
-            ErrorKind::InvalidLen => f.write_str("invalid length argument"),
             ErrorKind::InvalidUtf8Error(source) => Display::fmt(source, f),
         }
     }
@@ -141,7 +138,6 @@ impl fmt::Debug for ErrorKind {
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => fmt::Debug::fmt(source, f),
             ErrorKind::NotWellFormed => f.write_str("data is not well formed"),
-            ErrorKind::InvalidLen => f.write_str("invalid length argument"),
             ErrorKind::InvalidUtf8Error(source) => Display::fmt(source, f),
         }
     }
@@ -154,8 +150,7 @@ impl error::Error for ErrorKind {
             | ErrorKind::EofWhileParsingValue
             | ErrorKind::TrailingData
             | ErrorKind::Encode(_)
-            | ErrorKind::NotWellFormed
-            | ErrorKind::InvalidLen => None,
+            | ErrorKind::NotWellFormed => None,
             #[cfg(feature = "std")]
             ErrorKind::Io(source) => Some(source),
             ErrorKind::InvalidUtf8Error(source) => Some(source),

@@ -1,9 +1,8 @@
 use crate::{
-    encode::{self, Encode},
-    error::{Error, Result},
+    encode::{self, Encode, Error},
     tag,
     write::Write,
-    ErrorKind, Simple, BREAK_CODE, IB_FP_SIMPLE_MASK, IB_MASK_ARRAY, IB_MASK_BYTE_STR, IB_MASK_MAP,
+    Simple, BREAK_CODE, IB_FP_SIMPLE_MASK, IB_MASK_ARRAY, IB_MASK_BYTE_STR, IB_MASK_MAP,
     IB_MASK_NEG_INT, IB_MASK_TAG, IB_MASK_TEXT_STR,
 };
 
@@ -35,7 +34,7 @@ where
         self.writer
     }
 
-    fn write_init_byte_len(&mut self, ty: u8, len: usize) -> Result<()> {
+    fn write_init_byte_len(&mut self, ty: u8, len: u64) -> Result<(), crate::error::Error> {
         if len < 24 {
             let len = u8::try_from(len).expect("length is greater than 24");
             self.writer.write_all(&[ty | len])?;
@@ -48,13 +47,9 @@ where
         } else if let Ok(len) = u32::try_from(len) {
             self.writer.write_all(&[ty | 26])?;
             self.writer.write_all(&len.to_be_bytes())?;
-        } else if let Ok(len) = u64::try_from(len) {
+        } else {
             self.writer.write_all(&[ty | 27])?;
             self.writer.write_all(&len.to_be_bytes())?;
-        } else {
-            self.writer.write_all(&[ty | 31])?;
-
-            todo!()
         }
 
         Ok(())
@@ -66,13 +61,13 @@ where
     W: Write,
 {
     type Ok = ();
-    type Error = Error;
+    type Error = crate::error::Error;
 
     type EncodeArr = EncodeArr<'a, W>;
     type EncodeMap = EncodeMap<'a, W>;
 
     #[inline]
-    fn encode_i8(self, value: i8) -> Result<()> {
+    fn encode_i8(self, value: i8) -> Result<(), Self::Error> {
         if 0 <= value {
             return self.encode_u8(u8::try_from(value).expect("value should be positive"));
         }
@@ -90,7 +85,7 @@ where
     }
 
     #[inline]
-    fn encode_i16(self, value: i16) -> Result<()> {
+    fn encode_i16(self, value: i16) -> Result<(), Self::Error> {
         if 0 <= value {
             return self.encode_u16(u16::try_from(value).expect("value should be positive"));
         }
@@ -111,7 +106,7 @@ where
     }
 
     #[inline]
-    fn encode_i32(self, value: i32) -> Result<()> {
+    fn encode_i32(self, value: i32) -> Result<(), Self::Error> {
         if 0 <= value {
             return self.encode_u32(u32::try_from(value).expect("value should be positive"));
         }
@@ -135,7 +130,7 @@ where
     }
 
     #[inline]
-    fn encode_i64(self, value: i64) -> Result<()> {
+    fn encode_i64(self, value: i64) -> Result<(), Self::Error> {
         if 0 <= value {
             return self.encode_u64(u64::try_from(value).expect("value should be positive"));
         }
@@ -162,9 +157,9 @@ where
     }
 
     #[inline]
-    fn encode_i128(self, value: i128) -> Result<()> {
+    fn encode_i128(self, value: i128) -> Result<(), Self::Error> {
         if 0 <= value {
-            return self.encode_u16(u16::try_from(value).expect("value should be positive"));
+            return self.encode_u128(u128::try_from(value).expect("value should be positive"));
         }
 
         let value = value + 1;
@@ -185,12 +180,12 @@ where
             self.writer.write_all(&[IB_MASK_NEG_INT | 27])?;
             self.writer.write_all(&value.to_be_bytes())
         } else {
-            todo!()
+            Err(Self::Error::invalid_value(value))
         }
     }
 
     #[inline]
-    fn encode_u8(self, value: u8) -> Result<()> {
+    fn encode_u8(self, value: u8) -> Result<(), Self::Error> {
         if value < 24 {
             self.writer.write_all(&[value])
         } else {
@@ -199,7 +194,7 @@ where
     }
 
     #[inline]
-    fn encode_u16(self, value: u16) -> Result<()> {
+    fn encode_u16(self, value: u16) -> Result<(), Self::Error> {
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
             self.writer.write_all(&[value])
@@ -212,7 +207,7 @@ where
     }
 
     #[inline]
-    fn encode_u32(self, value: u32) -> Result<()> {
+    fn encode_u32(self, value: u32) -> Result<(), Self::Error> {
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
             self.writer.write_all(&[value])
@@ -228,7 +223,7 @@ where
     }
 
     #[inline]
-    fn encode_u64(self, value: u64) -> Result<()> {
+    fn encode_u64(self, value: u64) -> Result<(), Self::Error> {
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
             self.writer.write_all(&[value])
@@ -247,7 +242,7 @@ where
     }
 
     #[inline]
-    fn encode_u128(self, value: u128) -> Result<()> {
+    fn encode_u128(self, value: u128) -> Result<(), Self::Error> {
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
             self.writer.write_all(&[value])
@@ -263,24 +258,28 @@ where
             self.writer.write_all(&[27])?;
             self.writer.write_all(&value.to_be_bytes())
         } else {
-            todo!()
+            Err(Self::Error::invalid_value(value))
         }
     }
 
     #[inline]
-    fn encode_str(self, value: &str) -> Result<()> {
-        self.write_init_byte_len(IB_MASK_TEXT_STR, value.len())?;
+    fn encode_str(self, value: &str) -> Result<(), Self::Error> {
+        let len = u64::try_from(value.len())
+            .map_err(|_| Self::Error::custom("length is greater than u64::MAX"))?;
+        self.write_init_byte_len(IB_MASK_TEXT_STR, len)?;
         self.writer.write_all(value.as_bytes())
     }
 
     #[inline]
-    fn encode_bytes(self, value: &[u8]) -> Result<()> {
-        self.write_init_byte_len(IB_MASK_BYTE_STR, value.len())?;
+    fn encode_bytes(self, value: &[u8]) -> Result<(), Self::Error> {
+        let len = u64::try_from(value.len())
+            .map_err(|_| Self::Error::custom("length is greater than u64::MAX"))?;
+        self.write_init_byte_len(IB_MASK_BYTE_STR, len)?;
         self.writer.write_all(value)
     }
 
     #[inline]
-    fn encode_arr(self, len: Option<usize>) -> Result<Self::EncodeArr> {
+    fn encode_arr(self, len: Option<u64>) -> Result<Self::EncodeArr, Self::Error> {
         if let Some(len) = len {
             self.write_init_byte_len(IB_MASK_ARRAY, len)?;
         } else {
@@ -290,7 +289,7 @@ where
     }
 
     #[inline]
-    fn encode_map(self, len: Option<usize>) -> Result<Self::EncodeMap> {
+    fn encode_map(self, len: Option<u64>) -> Result<Self::EncodeMap, Self::Error> {
         if let Some(len) = len {
             self.write_init_byte_len(IB_MASK_MAP, len)?;
         } else {
@@ -299,7 +298,8 @@ where
         Ok(EncodeMap::new(self, len))
     }
 
-    fn encode_tag<T>(self, tag_num: tag::Num, v: &T) -> Result<()>
+    #[inline]
+    fn encode_tag<T>(self, tag_num: tag::Num, v: &T) -> Result<(), Self::Error>
     where
         T: ?Sized + Encode,
     {
@@ -323,7 +323,7 @@ where
     }
 
     #[inline]
-    fn encode_simple<I>(self, v: I) -> Result<()>
+    fn encode_simple<I>(self, v: I) -> Result<(), Self::Error>
     where
         I: Into<Simple>,
     {
@@ -331,26 +331,26 @@ where
         if v < 24 {
             self.writer.write_all(&[IB_FP_SIMPLE_MASK | v])
         } else if (24..32).contains(&v) {
-            todo!()
+            Err(Self::Error::invalid_value(v))
         } else {
             self.writer.write_all(&[IB_FP_SIMPLE_MASK | 24, v])
         }
     }
 
     #[inline]
-    fn encode_f32(self, value: f32) -> Result<()> {
+    fn encode_f32(self, value: f32) -> Result<(), Self::Error> {
         self.writer.write_all(&[IB_FP_SIMPLE_MASK | 26])?;
         self.writer.write_all(&value.to_be_bytes())
     }
 
     #[inline]
-    fn encode_f64(self, value: f64) -> Result<()> {
+    fn encode_f64(self, value: f64) -> Result<(), Self::Error> {
         self.writer.write_all(&[IB_FP_SIMPLE_MASK | 27])?;
         self.writer.write_all(&value.to_be_bytes())
     }
 
     #[inline]
-    fn encode_none(self) -> Result<()> {
+    fn encode_none(self) -> Result<(), Self::Error> {
         self.encode_simple(Simple::NULL)
     }
 }
@@ -360,7 +360,7 @@ where
 #[derive(Debug)]
 pub struct EncodeArr<'a, W> {
     enc: &'a mut Encoder<W>,
-    remaining: Option<usize>,
+    remaining: Option<u64>,
 }
 
 impl<'a, W> EncodeArr<'a, W>
@@ -368,7 +368,7 @@ where
     W: Write,
 {
     #[inline]
-    fn new(enc: &'a mut Encoder<W>, remaining: Option<usize>) -> Self {
+    fn new(enc: &'a mut Encoder<W>, remaining: Option<u64>) -> Self {
         Self { enc, remaining }
     }
 }
@@ -378,16 +378,16 @@ where
     W: Write,
 {
     type Ok = ();
-    type Error = Error;
+    type Error = crate::error::Error;
 
     #[inline]
-    fn encode_element<T>(&mut self, value: &T) -> Result<()>
+    fn encode_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: ?Sized + Encode,
     {
         if let Some(rem) = &mut self.remaining {
             if *rem == 0 {
-                return Err(Error::new(ErrorKind::NotWellFormed));
+                return Err(Self::Error::custom("encoded too many elements"));
             }
             *rem -= 1;
         }
@@ -395,10 +395,10 @@ where
     }
 
     #[inline]
-    fn end(self) -> Result<()> {
+    fn end(self) -> Result<(), Self::Error> {
         if let Some(rem) = &self.remaining {
             if 0 < *rem {
-                Err(Error::new(ErrorKind::NotWellFormed))
+                Err(Self::Error::custom("encoded too few elements"))
             } else {
                 Ok(())
             }
@@ -413,8 +413,7 @@ where
 #[derive(Debug)]
 pub struct EncodeMap<'a, W> {
     enc: &'a mut Encoder<W>,
-    remaining: Option<usize>,
-    encoded_key: bool,
+    remaining: Option<u64>,
 }
 
 impl<'a, W> EncodeMap<'a, W>
@@ -422,12 +421,8 @@ where
     W: Write,
 {
     #[inline]
-    fn new(enc: &'a mut Encoder<W>, remaining: Option<usize>) -> Self {
-        Self {
-            enc,
-            remaining,
-            encoded_key: false,
-        }
+    fn new(enc: &'a mut Encoder<W>, remaining: Option<u64>) -> Self {
+        Self { enc, remaining }
     }
 }
 
@@ -436,48 +431,40 @@ where
     W: Write,
 {
     type Ok = ();
-    type Error = Error;
+    type Error = crate::error::Error;
 
     #[inline]
-    fn encode_key<T>(&mut self, key: &T) -> Result<()>
+    fn encode_key<T>(&mut self, key: &T) -> Result<(), Self::Error>
     where
         T: ?Sized + Encode,
     {
-        if self.encoded_key {
-            return Err(Error::new(ErrorKind::NotWellFormed));
-        }
         if let Some(rem) = &mut self.remaining {
             if *rem == 0 {
-                return Err(Error::new(ErrorKind::NotWellFormed));
+                return Err(Self::Error::custom("encoded too many entries"));
             }
         }
-        self.encoded_key = true;
         key.encode(&mut *self.enc)
     }
 
     #[inline]
-    fn encode_value<T>(&mut self, value: &T) -> Result<()>
+    fn encode_value<T>(&mut self, value: &T) -> Result<(), Self::Error>
     where
         T: ?Sized + Encode,
     {
-        if !self.encoded_key {
-            return Err(Error::new(ErrorKind::NotWellFormed));
-        }
         if let Some(rem) = &mut self.remaining {
             if *rem == 0 {
-                return Err(Error::new(ErrorKind::NotWellFormed));
+                return Err(Self::Error::custom("encoded too many entries"));
             }
             *rem -= 1;
         }
-        self.encoded_key = false;
         value.encode(&mut *self.enc)
     }
 
     #[inline]
-    fn end(self) -> Result<()> {
+    fn end(self) -> Result<(), Self::Error> {
         if let Some(rem) = &self.remaining {
             if 0 < *rem {
-                Err(Error::new(ErrorKind::NotWellFormed))
+                Err(Self::Error::custom("encoded too few entries"))
             } else {
                 Ok(())
             }
