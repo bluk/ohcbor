@@ -488,6 +488,9 @@ mod tests {
 
     use proptest::prelude::*;
 
+    /// Maximum negative integer
+    const NEG_INT_MIN: i128 = -2i128.pow(64);
+
     prop_compose! {
         fn tag()(num in any::<tag::Num>(), content in any::<u64>()) -> Tag<u64> {
             Tag::new(num, content)
@@ -524,6 +527,13 @@ mod tests {
         }
 
         #[test]
+        fn test_u128(v in 0..=u128::from(u64::MAX)) {
+            let output = to_vec(&v)?;
+            let decoded_v = from_slice(&output)?;
+            assert_eq!(v, decoded_v);
+        }
+
+        #[test]
         fn test_usize(v in 0..=usize::MAX) {
             let output = to_vec(&v)?;
             let decoded_v = from_slice(&output)?;
@@ -553,6 +563,13 @@ mod tests {
 
         #[test]
         fn test_i64(v in i64::MIN..=i64::MAX) {
+            let output = to_vec(&v)?;
+            let decoded_v = from_slice(&output)?;
+            assert_eq!(v, decoded_v);
+        }
+
+        #[test]
+        fn test_i128(v in NEG_INT_MIN..=i128::from(u64::MAX)) {
             let output = to_vec(&v)?;
             let decoded_v = from_slice(&output)?;
             assert_eq!(v, decoded_v);
