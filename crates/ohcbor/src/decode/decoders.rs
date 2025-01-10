@@ -1,13 +1,77 @@
 use crate::{
     buf::Buffer,
-    decode::{ArrAccess, DecodeSeed, Decoder, Error, MapAccess, Visitor},
+    decode::{
+        ArrAccess, DecodeSeed, Decoder, Error, IndefiniteLenItemAccess, MapAccess, Unexpected,
+        Visitor,
+    },
     error::ErrorKind,
     read::{Read, Ref},
-    Simple, ADDTL_INFO_MASK, BREAK_CODE, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN,
-    IB_MAP_MIN, IB_NEG_INT_MIN, IB_TAG_MIN, IB_TEXT_STR_MIN, IB_UINT_MIN,
+    Simple, ADDTL_INFO_MASK, BREAK_CODE, IB_FP_SIMPLE_MASK, IB_MASK_ARRAY, IB_MASK_BYTE_STR,
+    IB_MASK_MAP, IB_MASK_NEG_INT, IB_MASK_TAG, IB_MASK_TEXT_STR, IB_MASK_UINT,
 };
 
-use super::IndefiniteLenItemAccess;
+const IB_UINT_ONE_BYTE: u8 = IB_MASK_UINT | 24;
+const IB_UINT_TWO_BYTES: u8 = IB_MASK_UINT | 25;
+const IB_UINT_FOUR_BYTES: u8 = IB_MASK_UINT | 26;
+const IB_UINT_EIGHT_BYTES: u8 = IB_MASK_UINT | 27;
+const IB_UINT_RESERVED_MIN: u8 = IB_MASK_UINT | 28;
+const IB_UINT_RESERVED_MAX: u8 = IB_MASK_UINT | 30;
+const IB_UINT_NO_ARG: u8 = IB_MASK_UINT | 31;
+
+const IB_NEG_INT_ONE_BYTE: u8 = IB_MASK_NEG_INT | 24;
+const IB_NEG_INT_TWO_BYTES: u8 = IB_MASK_NEG_INT | 25;
+const IB_NEG_INT_FOUR_BYTES: u8 = IB_MASK_NEG_INT | 26;
+const IB_NEG_INT_EIGHT_BYTES: u8 = IB_MASK_NEG_INT | 27;
+const IB_NEG_INT_RESERVED_MIN: u8 = IB_MASK_NEG_INT | 28;
+const IB_NEG_INT_RESERVED_MAX: u8 = IB_MASK_NEG_INT | 30;
+const IB_NEG_INT_NO_ARG: u8 = IB_MASK_NEG_INT | 31;
+
+const IB_BYTE_STR_ONE_BYTE: u8 = IB_MASK_BYTE_STR | 24;
+const IB_BYTE_STR_TWO_BYTES: u8 = IB_MASK_BYTE_STR | 25;
+const IB_BYTE_STR_FOUR_BYTES: u8 = IB_MASK_BYTE_STR | 26;
+const IB_BYTE_STR_EIGHT_BYTES: u8 = IB_MASK_BYTE_STR | 27;
+const IB_BYTE_STR_RESERVED_MIN: u8 = IB_MASK_BYTE_STR | 28;
+const IB_BYTE_STR_RESERVED_MAX: u8 = IB_MASK_BYTE_STR | 30;
+const IB_BYTE_STR_NO_ARG: u8 = IB_MASK_BYTE_STR | 31;
+
+const IB_TEXT_STR_ONE_BYTE: u8 = IB_MASK_TEXT_STR | 24;
+const IB_TEXT_STR_TWO_BYTES: u8 = IB_MASK_TEXT_STR | 25;
+const IB_TEXT_STR_FOUR_BYTES: u8 = IB_MASK_TEXT_STR | 26;
+const IB_TEXT_STR_EIGHT_BYTES: u8 = IB_MASK_TEXT_STR | 27;
+const IB_TEXT_STR_RESERVED_MIN: u8 = IB_MASK_TEXT_STR | 28;
+const IB_TEXT_STR_RESERVED_MAX: u8 = IB_MASK_TEXT_STR | 30;
+const IB_TEXT_STR_NO_ARG: u8 = IB_MASK_TEXT_STR | 31;
+
+const IB_ARRAY_ONE_BYTE: u8 = IB_MASK_ARRAY | 24;
+const IB_ARRAY_TWO_BYTES: u8 = IB_MASK_ARRAY | 25;
+const IB_ARRAY_FOUR_BYTES: u8 = IB_MASK_ARRAY | 26;
+const IB_ARRAY_EIGHT_BYTES: u8 = IB_MASK_ARRAY | 27;
+const IB_ARRAY_RESERVED_MIN: u8 = IB_MASK_ARRAY | 28;
+const IB_ARRAY_RESERVED_MAX: u8 = IB_MASK_ARRAY | 30;
+const IB_ARRAY_NO_ARG: u8 = IB_MASK_ARRAY | 31;
+
+const IB_MAP_ONE_BYTE: u8 = IB_MASK_MAP | 24;
+const IB_MAP_TWO_BYTES: u8 = IB_MASK_MAP | 25;
+const IB_MAP_FOUR_BYTES: u8 = IB_MASK_MAP | 26;
+const IB_MAP_EIGHT_BYTES: u8 = IB_MASK_MAP | 27;
+const IB_MAP_RESERVED_MIN: u8 = IB_MASK_MAP | 28;
+const IB_MAP_RESERVED_MAX: u8 = IB_MASK_MAP | 30;
+const IB_MAP_NO_ARG: u8 = IB_MASK_MAP | 31;
+
+const IB_TAG_ONE_BYTE: u8 = IB_MASK_TAG | 24;
+const IB_TAG_TWO_BYTES: u8 = IB_MASK_TAG | 25;
+const IB_TAG_FOUR_BYTES: u8 = IB_MASK_TAG | 26;
+const IB_TAG_EIGHT_BYTES: u8 = IB_MASK_TAG | 27;
+const IB_TAG_RESERVED_MIN: u8 = IB_MASK_TAG | 28;
+const IB_TAG_RESERVED_MAX: u8 = IB_MASK_TAG | 30;
+const IB_TAG_NO_ARG: u8 = IB_MASK_TAG | 31;
+
+const IB_SIMPLE_ONE_BYTE: u8 = IB_FP_SIMPLE_MASK | 24;
+const IB_FP16: u8 = IB_FP_SIMPLE_MASK | 25;
+const IB_FP32: u8 = IB_FP_SIMPLE_MASK | 26;
+const IB_FP64: u8 = IB_FP_SIMPLE_MASK | 27;
+const IB_FP_SIMPLE_RESERVED_MIN: u8 = IB_FP_SIMPLE_MASK | 28;
+const IB_FP_SIMPLE_RESERVED_MAX: u8 = IB_FP_SIMPLE_MASK | 30;
 
 pub(crate) struct DecoderImpl<R, B> {
     read: R,
@@ -75,6 +139,78 @@ where
     }
 }
 
+impl<'de, R, B> DecoderImpl<R, B>
+where
+    R: Read<'de>,
+    B: Buffer,
+{
+    fn parse_byte_str<V>(&mut self, visitor: V, len: usize) -> Result<V::Value, crate::Error>
+    where
+        V: Visitor<'de>,
+    {
+        self.buf.clear();
+        match self.read.read_exact(len, &mut self.buf)? {
+            Ref::Source(bytes) => visitor.visit_borrowed_bytes(bytes),
+            Ref::Buffer(bytes) => visitor.visit_bytes(bytes.as_slice()),
+        }
+    }
+
+    fn parse_text_str<V>(&mut self, visitor: V, len: usize) -> Result<V::Value, crate::Error>
+    where
+        V: Visitor<'de>,
+    {
+        self.buf.clear();
+        match self.read.read_exact(len, &mut self.buf)? {
+            Ref::Source(bytes) => match core::str::from_utf8(bytes) {
+                Ok(s) => visitor.visit_borrowed_str(s),
+                Err(e) => Err(crate::Error::new(ErrorKind::InvalidUtf8Error(e))),
+            },
+            Ref::Buffer(bytes) => match core::str::from_utf8(bytes.as_slice()) {
+                Ok(s) => visitor.visit_str(s),
+                Err(e) => Err(crate::Error::new(ErrorKind::InvalidUtf8Error(e))),
+            },
+        }
+    }
+
+    fn parse_array<V>(
+        &mut self,
+        visitor: V,
+        mut remaining: Option<usize>,
+    ) -> Result<V::Value, crate::Error>
+    where
+        V: Visitor<'de>,
+    {
+        let ret = visitor.visit_arr(ArrAccessImpl {
+            de: self,
+            remaining: &mut remaining,
+        });
+
+        match (ret, self.on_end_remaining(remaining)) {
+            (Ok(ret), Ok(())) => Ok(ret),
+            (Err(err), _) | (_, Err(err)) => Err(err),
+        }
+    }
+
+    fn parse_map<V>(
+        &mut self,
+        visitor: V,
+        mut remaining: Option<usize>,
+    ) -> Result<V::Value, crate::Error>
+    where
+        V: Visitor<'de>,
+    {
+        let ret = visitor.visit_map(MapAccessImpl {
+            de: self,
+            remaining: &mut remaining,
+        });
+
+        match (ret, self.on_end_remaining(remaining)) {
+            (Ok(ret), Ok(())) => Ok(ret),
+            (Err(err), _) | (_, Err(err)) => Err(err),
+        }
+    }
+}
+
 impl<'de, R, B> Decoder<'de> for &mut DecoderImpl<R, B>
 where
     R: Read<'de>,
@@ -93,225 +229,236 @@ where
         let init_byte = self.parse_next()?;
 
         match init_byte {
-            IB_UINT_MIN..IB_NEG_INT_MIN => {
-                let addtl_info = init_byte & ADDTL_INFO_MASK;
-                match addtl_info {
-                    0..24 => visitor.visit_u8(addtl_info),
-                    24 => {
-                        let val = self.parse_next()?;
-                        visitor.visit_u8(val)
-                    }
-                    25 => {
-                        let val = self.read.parse_u16()?;
-                        visitor.visit_u16(val)
-                    }
-                    26 => {
-                        let val = self.read.parse_u32()?;
-                        visitor.visit_u32(val)
-                    }
-                    27 => {
-                        let val = self.read.parse_u64()?;
-                        visitor.visit_u64(val)
-                    }
-                    28..=31 => Err(Error::malformed()),
-                    _ => {
-                        unreachable!()
-                    }
-                }
+            IB_MASK_UINT..IB_UINT_ONE_BYTE => visitor.visit_u8(init_byte & ADDTL_INFO_MASK),
+            IB_UINT_ONE_BYTE => {
+                let val = self.parse_next()?;
+                visitor.visit_u8(val)
             }
-            IB_NEG_INT_MIN..IB_BYTE_STR_MIN => {
-                let addtl_info = init_byte & ADDTL_INFO_MASK;
-                match addtl_info {
-                    0..24 => {
-                        let arg_val =
-                            i8::try_from(addtl_info).expect("argument should be less than 24");
-                        visitor.visit_i8(-1 - arg_val)
-                    }
-                    24 => {
-                        let val = self.parse_next()?;
-
-                        if let Some(val) = i8::try_from(val)
-                            .ok()
-                            .and_then(|val| (-1i8).checked_sub(val))
-                        {
-                            visitor.visit_i8(val)
-                        } else {
-                            visitor.visit_i16(-1 - i16::from(val))
-                        }
-                    }
-                    25 => {
-                        let val = self.read.parse_u16()?;
-
-                        if let Some(val) = i16::try_from(val)
-                            .ok()
-                            .and_then(|val| (-1i16).checked_sub(val))
-                        {
-                            visitor.visit_i16(val)
-                        } else {
-                            visitor.visit_i32(-1 - i32::from(val))
-                        }
-                    }
-                    26 => {
-                        let val = self.read.parse_u32()?;
-
-                        if let Some(val) = i32::try_from(val)
-                            .ok()
-                            .and_then(|val| (-1i32).checked_sub(val))
-                        {
-                            visitor.visit_i32(val)
-                        } else {
-                            visitor.visit_i64(-1 - i64::from(val))
-                        }
-                    }
-                    27 => {
-                        let val = self.read.parse_u64()?;
-
-                        if let Some(val) = i64::try_from(val)
-                            .ok()
-                            .and_then(|val| (-1i64).checked_sub(val))
-                        {
-                            visitor.visit_i64(val)
-                        } else {
-                            visitor.visit_i128(-1 - i128::from(val))
-                        }
-                    }
-                    28..=31 => Err(Error::malformed()),
-                    _ => {
-                        unreachable!()
-                    }
-                }
+            IB_UINT_TWO_BYTES => {
+                let val = self.read.parse_u16()?;
+                visitor.visit_u16(val)
             }
-            IB_BYTE_STR_MIN..IB_TEXT_STR_MIN => {
-                self.buf.clear();
-                if let Some(len) = self.read.parse_len(init_byte)? {
-                    match self.read.read_exact(len, &mut self.buf)? {
-                        Ref::Source(bytes) => visitor.visit_borrowed_bytes(bytes),
-                        Ref::Buffer(bytes) => visitor.visit_bytes(bytes.as_slice()),
-                    }
+            IB_UINT_FOUR_BYTES => {
+                let val = self.read.parse_u32()?;
+                visitor.visit_u32(val)
+            }
+            IB_UINT_EIGHT_BYTES => {
+                let val = self.read.parse_u64()?;
+                visitor.visit_u64(val)
+            }
+            IB_UINT_RESERVED_MIN..=IB_UINT_RESERVED_MAX | IB_UINT_NO_ARG => Err(Error::malformed()),
+            IB_MASK_NEG_INT..IB_NEG_INT_ONE_BYTE => {
+                let arg_val = i8::try_from(init_byte & ADDTL_INFO_MASK)
+                    .expect("argument should be less than 24");
+                visitor.visit_i8(-1 - arg_val)
+            }
+            IB_NEG_INT_ONE_BYTE => {
+                let val = self.parse_next()?;
+                visitor.visit_i16(-1 - i16::from(val))
+            }
+            IB_NEG_INT_TWO_BYTES => {
+                let val = self.read.parse_u16()?;
+                visitor.visit_i32(-1 - i32::from(val))
+            }
+            IB_NEG_INT_FOUR_BYTES => {
+                let val = self.read.parse_u32()?;
+                visitor.visit_i64(-1 - i64::from(val))
+            }
+            IB_NEG_INT_EIGHT_BYTES => {
+                let val = self.read.parse_u64()?;
+
+                if let Some(val) = i64::try_from(val)
+                    .ok()
+                    .and_then(|val| (-1i64).checked_sub(val))
+                {
+                    visitor.visit_i64(val)
                 } else {
-                    let ret =
-                        visitor.visit_indefinite_len_bytes(IndefiniteItemAccessImpl { de: self });
-
-                    match (ret, self.on_end_remaining(None)) {
-                        (Ok(ret), Ok(())) => Ok(ret),
-                        (Err(err), _) | (_, Err(err)) => Err(err),
-                    }
+                    visitor.visit_i128(-1 - i128::from(val))
                 }
             }
-            IB_TEXT_STR_MIN..IB_ARRAY_MIN => {
-                self.buf.clear();
-
-                if let Some(len) = self.read.parse_len(init_byte)? {
-                    match self.read.read_exact(len, &mut self.buf)? {
-                        Ref::Source(bytes) => match core::str::from_utf8(bytes) {
-                            Ok(s) => visitor.visit_borrowed_str(s),
-                            Err(e) => Err(crate::Error::new(ErrorKind::InvalidUtf8Error(e))),
-                        },
-                        Ref::Buffer(bytes) => match core::str::from_utf8(bytes.as_slice()) {
-                            Ok(s) => visitor.visit_str(s),
-                            Err(e) => Err(crate::Error::new(ErrorKind::InvalidUtf8Error(e))),
-                        },
-                    }
-                } else {
-                    let ret =
-                        visitor.visit_indefinite_len_str(IndefiniteItemAccessImpl { de: self });
-
-                    match (ret, self.on_end_remaining(None)) {
-                        (Ok(ret), Ok(())) => Ok(ret),
-                        (Err(err), _) | (_, Err(err)) => Err(err),
-                    }
-                }
+            IB_NEG_INT_RESERVED_MIN..=IB_NEG_INT_RESERVED_MAX | IB_NEG_INT_NO_ARG => {
+                Err(Error::malformed())
             }
-            IB_ARRAY_MIN..IB_MAP_MIN => {
-                let mut remaining = self.read.parse_len(init_byte)?;
+            IB_MASK_BYTE_STR..IB_BYTE_STR_ONE_BYTE => {
+                let len = usize::from(init_byte & ADDTL_INFO_MASK);
+                self.parse_byte_str(visitor, len)
+            }
+            IB_BYTE_STR_ONE_BYTE => {
+                let len = usize::from(self.parse_next()?);
+                self.parse_byte_str(visitor, len)
+            }
+            IB_BYTE_STR_TWO_BYTES => {
+                let len = usize::from(self.read.parse_u16()?);
+                self.parse_byte_str(visitor, len)
+            }
+            IB_BYTE_STR_FOUR_BYTES => {
+                let len = self.read.parse_u32()?;
+                let len = usize::try_from(len).map_err(|_| {
+                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                })?;
+                self.parse_byte_str(visitor, len)
+            }
+            IB_BYTE_STR_EIGHT_BYTES => {
+                let len = self.read.parse_u64()?;
+                let len = usize::try_from(len).map_err(|_| {
+                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                })?;
+                self.parse_byte_str(visitor, len)
+            }
+            IB_BYTE_STR_RESERVED_MIN..=IB_BYTE_STR_RESERVED_MAX => Err(Error::malformed()),
+            IB_BYTE_STR_NO_ARG => {
+                let ret = visitor.visit_indefinite_len_bytes(IndefiniteItemAccessImpl { de: self });
 
-                let ret = visitor.visit_arr(ArrAccessImpl {
-                    de: self,
-                    remaining: &mut remaining,
-                });
-
-                match (ret, self.on_end_remaining(remaining)) {
+                match (ret, self.on_end_remaining(None)) {
                     (Ok(ret), Ok(())) => Ok(ret),
                     (Err(err), _) | (_, Err(err)) => Err(err),
                 }
             }
-            IB_MAP_MIN..IB_TAG_MIN => {
-                let mut remaining = self.read.parse_len(init_byte)?;
+            IB_MASK_TEXT_STR..IB_TEXT_STR_ONE_BYTE => {
+                let len = usize::from(init_byte & ADDTL_INFO_MASK);
+                self.parse_text_str(visitor, len)
+            }
+            IB_TEXT_STR_ONE_BYTE => {
+                let len = usize::from(self.parse_next()?);
+                self.parse_text_str(visitor, len)
+            }
+            IB_TEXT_STR_TWO_BYTES => {
+                let len = usize::from(self.read.parse_u16()?);
+                self.parse_text_str(visitor, len)
+            }
+            IB_TEXT_STR_FOUR_BYTES => {
+                let len = self.read.parse_u32()?;
+                let len = usize::try_from(len).map_err(|_| {
+                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                })?;
+                self.parse_text_str(visitor, len)
+            }
+            IB_TEXT_STR_EIGHT_BYTES => {
+                let len = self.read.parse_u64()?;
+                let len = usize::try_from(len).map_err(|_| {
+                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                })?;
+                self.parse_text_str(visitor, len)
+            }
+            IB_TEXT_STR_RESERVED_MIN..=IB_TEXT_STR_RESERVED_MAX => Err(Error::malformed()),
+            IB_TEXT_STR_NO_ARG => {
+                let ret = visitor.visit_indefinite_len_str(IndefiniteItemAccessImpl { de: self });
 
-                let ret = visitor.visit_map(MapAccessImpl {
-                    de: self,
-                    remaining: &mut remaining,
-                });
-
-                match (ret, self.on_end_remaining(remaining)) {
+                match (ret, self.on_end_remaining(None)) {
                     (Ok(ret), Ok(())) => Ok(ret),
                     (Err(err), _) | (_, Err(err)) => Err(err),
                 }
             }
-            IB_TAG_MIN..IB_FP_SIMPLE_MIN => {
-                let arg_val = init_byte & ADDTL_INFO_MASK;
-                let tag_num = match arg_val {
-                    0..24 => u64::from(arg_val),
-                    24 => {
-                        let val = self.parse_next()?;
-                        u64::from(val)
-                    }
-                    25 => {
-                        let val = self.read.parse_u16()?;
-                        u64::from(val)
-                    }
-                    26 => {
-                        let val = self.read.parse_u32()?;
-                        u64::from(val)
-                    }
-                    27 => self.read.parse_u64()?,
-                    28..=31 => return Err(Error::malformed()),
-                    _ => {
-                        unreachable!()
-                    }
-                };
-
+            IB_MASK_ARRAY..IB_ARRAY_ONE_BYTE => {
+                let remaining = usize::from(init_byte & ADDTL_INFO_MASK);
+                self.parse_array(visitor, Some(remaining))
+            }
+            IB_ARRAY_ONE_BYTE => {
+                let remaining = usize::from(self.parse_next()?);
+                self.parse_array(visitor, Some(remaining))
+            }
+            IB_ARRAY_TWO_BYTES => {
+                let remaining = usize::from(self.read.parse_u16()?);
+                self.parse_array(visitor, Some(remaining))
+            }
+            IB_ARRAY_FOUR_BYTES => {
+                let remaining = self.read.parse_u32()?;
+                let remaining = usize::try_from(remaining).map_err(|_| {
+                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                })?;
+                self.parse_array(visitor, Some(remaining))
+            }
+            IB_ARRAY_EIGHT_BYTES => {
+                let remaining = self.read.parse_u64()?;
+                let remaining = usize::try_from(remaining).map_err(|_| {
+                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                })?;
+                self.parse_array(visitor, Some(remaining))
+            }
+            IB_ARRAY_RESERVED_MIN..=IB_ARRAY_RESERVED_MAX => Err(Error::malformed()),
+            IB_ARRAY_NO_ARG => self.parse_array(visitor, None),
+            IB_MASK_MAP..IB_MAP_ONE_BYTE => {
+                let remaining = usize::from(init_byte & ADDTL_INFO_MASK);
+                self.parse_map(visitor, Some(remaining))
+            }
+            IB_MAP_ONE_BYTE => {
+                let remaining = usize::from(self.parse_next()?);
+                self.parse_map(visitor, Some(remaining))
+            }
+            IB_MAP_TWO_BYTES => {
+                let remaining = usize::from(self.read.parse_u16()?);
+                self.parse_map(visitor, Some(remaining))
+            }
+            IB_MAP_FOUR_BYTES => {
+                let remaining = self.read.parse_u32()?;
+                let remaining = usize::try_from(remaining).map_err(|_| {
+                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                })?;
+                self.parse_map(visitor, Some(remaining))
+            }
+            IB_MAP_EIGHT_BYTES => {
+                let remaining = self.read.parse_u64()?;
+                let remaining = usize::try_from(remaining).map_err(|_| {
+                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                })?;
+                self.parse_map(visitor, Some(remaining))
+            }
+            IB_MAP_RESERVED_MIN..=IB_MAP_RESERVED_MAX => Err(Error::malformed()),
+            IB_MAP_NO_ARG => self.parse_map(visitor, None),
+            IB_MASK_TAG..IB_TAG_ONE_BYTE => {
+                let tag_num = u64::from(init_byte & ADDTL_INFO_MASK);
                 visitor.visit_tag(tag_num, self)
             }
-            IB_FP_SIMPLE_MIN..=0xff => {
-                let arg_val = init_byte & ADDTL_INFO_MASK;
-                match arg_val {
-                    0..24 => {
-                        let v = Simple::from(arg_val);
-                        if v.is_null() {
-                            visitor.visit_none()
-                        } else {
-                            visitor.visit_simple(v)
-                        }
-                    }
-                    24 => {
-                        let val = self.parse_next()?;
-                        if val < 32 {
-                            Err(Error::malformed())
-                        } else {
-                            visitor.visit_simple(Simple::from(val))
-                        }
-                    }
-                    25 => {
-                        // Should add a "f16" feature to add "visit_f16" method
-                        // to Visitor and to implement f16 support for
-                        // Decode/Encode.
-                        let val = half::f16::from_be_bytes(self.read.read_arr()?);
-                        visitor.visit_f32(f32::from(val))
-                    }
-                    26 => {
-                        let val = f32::from_be_bytes(self.read.read_arr()?);
-                        visitor.visit_f32(val)
-                    }
-                    27 => {
-                        let val = f64::from_be_bytes(self.read.read_arr()?);
-                        visitor.visit_f64(val)
-                    }
-                    28..=31 => Err(Error::malformed()),
-                    _ => {
-                        unreachable!()
-                    }
+            IB_TAG_ONE_BYTE => {
+                let tag_num = u64::from(self.parse_next()?);
+                visitor.visit_tag(tag_num, self)
+            }
+            IB_TAG_TWO_BYTES => {
+                let tag_num = u64::from(self.read.parse_u16()?);
+                visitor.visit_tag(tag_num, self)
+            }
+            IB_TAG_FOUR_BYTES => {
+                let tag_num = u64::from(self.read.parse_u32()?);
+                visitor.visit_tag(tag_num, self)
+            }
+            IB_TAG_EIGHT_BYTES => {
+                let tag_num = self.read.parse_u64()?;
+                visitor.visit_tag(tag_num, self)
+            }
+            IB_TAG_RESERVED_MIN..=IB_TAG_RESERVED_MAX | IB_TAG_NO_ARG => Err(Error::malformed()),
+            IB_FP_SIMPLE_MASK..IB_SIMPLE_ONE_BYTE => {
+                let v = Simple::from(init_byte & ADDTL_INFO_MASK);
+                if v.is_null() {
+                    visitor.visit_none()
+                } else {
+                    visitor.visit_simple(v)
                 }
+            }
+            IB_SIMPLE_ONE_BYTE => {
+                let val = self.parse_next()?;
+                if val < 32 {
+                    Err(Error::malformed())
+                } else {
+                    visitor.visit_simple(Simple::from(val))
+                }
+            }
+            IB_FP16 => {
+                // Should add a "f16" feature to add "visit_f16" method
+                // to Visitor and to implement f16 support for
+                // Decode/Encode.
+                let val = half::f16::from_be_bytes(self.read.read_arr()?);
+                visitor.visit_f32(f32::from(val))
+            }
+            IB_FP32 => {
+                let val = f32::from_be_bytes(self.read.read_arr()?);
+                visitor.visit_f32(val)
+            }
+            IB_FP64 => {
+                let val = f64::from_be_bytes(self.read.read_arr()?);
+                visitor.visit_f64(val)
+            }
+            IB_FP_SIMPLE_RESERVED_MIN..=IB_FP_SIMPLE_RESERVED_MAX | BREAK_CODE => {
+                Err(Error::malformed())
             }
         }
     }

@@ -3,8 +3,8 @@ use crate::{
     error::{Error, Result},
     tag,
     write::Write,
-    ErrorKind, Simple, BREAK_CODE, IB_ARRAY_MIN, IB_BYTE_STR_MIN, IB_FP_SIMPLE_MIN, IB_MAP_MIN,
-    IB_NEG_INT_MIN, IB_TAG_MIN, IB_TEXT_STR_MIN,
+    ErrorKind, Simple, BREAK_CODE, IB_FP_SIMPLE_MASK, IB_MASK_ARRAY, IB_MASK_BYTE_STR, IB_MASK_MAP,
+    IB_MASK_NEG_INT, IB_MASK_TAG, IB_MASK_TEXT_STR,
 };
 
 /// A CBOR Encoder for types which implement [`Encode`].
@@ -82,10 +82,10 @@ where
 
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
-            self.writer.write_all(&[IB_NEG_INT_MIN | value])
+            self.writer.write_all(&[IB_MASK_NEG_INT | value])
         } else {
             let value = u8::try_from(value).expect("value is greater than u8::MAX");
-            self.writer.write_all(&[IB_NEG_INT_MIN | 24, value])
+            self.writer.write_all(&[IB_MASK_NEG_INT | 24, value])
         }
     }
 
@@ -100,12 +100,12 @@ where
 
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
-            self.writer.write_all(&[IB_NEG_INT_MIN | value])
+            self.writer.write_all(&[IB_MASK_NEG_INT | value])
         } else if let Ok(value) = u8::try_from(value) {
-            self.writer.write_all(&[IB_NEG_INT_MIN | 24, value])
+            self.writer.write_all(&[IB_MASK_NEG_INT | 24, value])
         } else {
             let value = u16::try_from(value).expect("value is greater than u16::MAX");
-            self.writer.write_all(&[IB_NEG_INT_MIN | 25])?;
+            self.writer.write_all(&[IB_MASK_NEG_INT | 25])?;
             self.writer.write_all(&value.to_be_bytes())
         }
     }
@@ -121,15 +121,15 @@ where
 
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
-            self.writer.write_all(&[IB_NEG_INT_MIN | value])
+            self.writer.write_all(&[IB_MASK_NEG_INT | value])
         } else if let Ok(value) = u8::try_from(value) {
-            self.writer.write_all(&[IB_NEG_INT_MIN | 24, value])
+            self.writer.write_all(&[IB_MASK_NEG_INT | 24, value])
         } else if let Ok(value) = u16::try_from(value) {
-            self.writer.write_all(&[IB_NEG_INT_MIN | 25])?;
+            self.writer.write_all(&[IB_MASK_NEG_INT | 25])?;
             self.writer.write_all(&value.to_be_bytes())
         } else {
             let value = u32::try_from(value).expect("value is greater than u32::MAX");
-            self.writer.write_all(&[IB_NEG_INT_MIN | 26])?;
+            self.writer.write_all(&[IB_MASK_NEG_INT | 26])?;
             self.writer.write_all(&value.to_be_bytes())
         }
     }
@@ -145,18 +145,18 @@ where
 
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
-            self.writer.write_all(&[IB_NEG_INT_MIN | value])
+            self.writer.write_all(&[IB_MASK_NEG_INT | value])
         } else if let Ok(value) = u8::try_from(value) {
-            self.writer.write_all(&[IB_NEG_INT_MIN | 24, value])
+            self.writer.write_all(&[IB_MASK_NEG_INT | 24, value])
         } else if let Ok(value) = u16::try_from(value) {
-            self.writer.write_all(&[IB_NEG_INT_MIN | 25])?;
+            self.writer.write_all(&[IB_MASK_NEG_INT | 25])?;
             self.writer.write_all(&value.to_be_bytes())
         } else if let Ok(value) = u32::try_from(value) {
-            self.writer.write_all(&[IB_NEG_INT_MIN | 26])?;
+            self.writer.write_all(&[IB_MASK_NEG_INT | 26])?;
             self.writer.write_all(&value.to_be_bytes())
         } else {
             let value = u64::try_from(value).expect("value is greater than u64::MAX");
-            self.writer.write_all(&[IB_NEG_INT_MIN | 27])?;
+            self.writer.write_all(&[IB_MASK_NEG_INT | 27])?;
             self.writer.write_all(&value.to_be_bytes())
         }
     }
@@ -172,17 +172,17 @@ where
 
         if value < 24 {
             let value = u8::try_from(value).expect("value is greater than 24");
-            self.writer.write_all(&[IB_NEG_INT_MIN | value])
+            self.writer.write_all(&[IB_MASK_NEG_INT | value])
         } else if let Ok(value) = u8::try_from(value) {
-            self.writer.write_all(&[IB_NEG_INT_MIN | 24, value])
+            self.writer.write_all(&[IB_MASK_NEG_INT | 24, value])
         } else if let Ok(value) = u16::try_from(value) {
-            self.writer.write_all(&[IB_NEG_INT_MIN | 25])?;
+            self.writer.write_all(&[IB_MASK_NEG_INT | 25])?;
             self.writer.write_all(&value.to_be_bytes())
         } else if let Ok(value) = u32::try_from(value) {
-            self.writer.write_all(&[IB_NEG_INT_MIN | 26])?;
+            self.writer.write_all(&[IB_MASK_NEG_INT | 26])?;
             self.writer.write_all(&value.to_be_bytes())
         } else if let Ok(value) = u64::try_from(value) {
-            self.writer.write_all(&[IB_NEG_INT_MIN | 27])?;
+            self.writer.write_all(&[IB_MASK_NEG_INT | 27])?;
             self.writer.write_all(&value.to_be_bytes())
         } else {
             todo!()
@@ -269,22 +269,22 @@ where
 
     #[inline]
     fn encode_str(self, value: &str) -> Result<()> {
-        self.write_init_byte_len(IB_TEXT_STR_MIN, value.len())?;
+        self.write_init_byte_len(IB_MASK_TEXT_STR, value.len())?;
         self.writer.write_all(value.as_bytes())
     }
 
     #[inline]
     fn encode_bytes(self, value: &[u8]) -> Result<()> {
-        self.write_init_byte_len(IB_BYTE_STR_MIN, value.len())?;
+        self.write_init_byte_len(IB_MASK_BYTE_STR, value.len())?;
         self.writer.write_all(value)
     }
 
     #[inline]
     fn encode_arr(self, len: Option<usize>) -> Result<Self::EncodeArr> {
         if let Some(len) = len {
-            self.write_init_byte_len(IB_ARRAY_MIN, len)?;
+            self.write_init_byte_len(IB_MASK_ARRAY, len)?;
         } else {
-            self.writer.write_all(&[IB_ARRAY_MIN | 31])?;
+            self.writer.write_all(&[IB_MASK_ARRAY | 31])?;
         }
         Ok(EncodeArr::new(self, len))
     }
@@ -292,9 +292,9 @@ where
     #[inline]
     fn encode_map(self, len: Option<usize>) -> Result<Self::EncodeMap> {
         if let Some(len) = len {
-            self.write_init_byte_len(IB_MAP_MIN, len)?;
+            self.write_init_byte_len(IB_MASK_MAP, len)?;
         } else {
-            self.writer.write_all(&[IB_MAP_MIN | 31])?;
+            self.writer.write_all(&[IB_MASK_MAP | 31])?;
         }
         Ok(EncodeMap::new(self, len))
     }
@@ -305,17 +305,17 @@ where
     {
         if tag_num < 24 {
             let tag_num = u8::try_from(tag_num).expect("value is greater than 24");
-            self.writer.write_all(&[IB_TAG_MIN | tag_num])?;
+            self.writer.write_all(&[IB_MASK_TAG | tag_num])?;
         } else if let Ok(tag_num) = u8::try_from(tag_num) {
-            self.writer.write_all(&[IB_TAG_MIN | 24, tag_num])?;
+            self.writer.write_all(&[IB_MASK_TAG | 24, tag_num])?;
         } else if let Ok(tag_num) = u16::try_from(tag_num) {
-            self.writer.write_all(&[IB_TAG_MIN | 25])?;
+            self.writer.write_all(&[IB_MASK_TAG | 25])?;
             self.writer.write_all(&tag_num.to_be_bytes())?;
         } else if let Ok(tag_num) = u32::try_from(tag_num) {
-            self.writer.write_all(&[IB_TAG_MIN | 26])?;
+            self.writer.write_all(&[IB_MASK_TAG | 26])?;
             self.writer.write_all(&tag_num.to_be_bytes())?;
         } else {
-            self.writer.write_all(&[IB_TAG_MIN | 27])?;
+            self.writer.write_all(&[IB_MASK_TAG | 27])?;
             self.writer.write_all(&tag_num.to_be_bytes())?;
         }
 
@@ -329,23 +329,23 @@ where
     {
         let v = u8::from(v.into());
         if v < 24 {
-            self.writer.write_all(&[IB_FP_SIMPLE_MIN | v])
+            self.writer.write_all(&[IB_FP_SIMPLE_MASK | v])
         } else if (24..32).contains(&v) {
             todo!()
         } else {
-            self.writer.write_all(&[IB_FP_SIMPLE_MIN | 24, v])
+            self.writer.write_all(&[IB_FP_SIMPLE_MASK | 24, v])
         }
     }
 
     #[inline]
     fn encode_f32(self, value: f32) -> Result<()> {
-        self.writer.write_all(&[IB_FP_SIMPLE_MIN | 26])?;
+        self.writer.write_all(&[IB_FP_SIMPLE_MASK | 26])?;
         self.writer.write_all(&value.to_be_bytes())
     }
 
     #[inline]
     fn encode_f64(self, value: f64) -> Result<()> {
-        self.writer.write_all(&[IB_FP_SIMPLE_MIN | 27])?;
+        self.writer.write_all(&[IB_FP_SIMPLE_MASK | 27])?;
         self.writer.write_all(&value.to_be_bytes())
     }
 

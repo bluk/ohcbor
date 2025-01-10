@@ -100,14 +100,14 @@ pub use simple::Simple;
 #[doc(inline)]
 pub use tag::Tag;
 
-const IB_UINT_MIN: u8 = 0b0000_0000;
-const IB_NEG_INT_MIN: u8 = 0b0010_0000;
-const IB_BYTE_STR_MIN: u8 = 0b0100_0000;
-const IB_TEXT_STR_MIN: u8 = 0b0110_0000;
-const IB_ARRAY_MIN: u8 = 0b1000_0000;
-const IB_MAP_MIN: u8 = 0b1010_0000;
-const IB_TAG_MIN: u8 = 0b1100_0000;
-const IB_FP_SIMPLE_MIN: u8 = 0b1110_0000;
+const IB_MASK_UINT: u8 = 0b0000_0000;
+const IB_MASK_NEG_INT: u8 = 0b0010_0000;
+const IB_MASK_BYTE_STR: u8 = 0b0100_0000;
+const IB_MASK_TEXT_STR: u8 = 0b0110_0000;
+const IB_MASK_ARRAY: u8 = 0b1000_0000;
+const IB_MASK_MAP: u8 = 0b1010_0000;
+const IB_MASK_TAG: u8 = 0b1100_0000;
+const IB_FP_SIMPLE_MASK: u8 = 0b1110_0000;
 
 /// Additional information mask (lower 5 bits)
 const ADDTL_INFO_MASK: u8 = 0b0001_1111;

@@ -3,7 +3,6 @@
 use crate::{
     buf::Buffer,
     error::{Error, ErrorKind, Result},
-    ADDTL_INFO_MASK,
 };
 use core::{array, ops::Deref};
 
@@ -84,18 +83,6 @@ pub trait Read<'a> {
     /// - malformatted input
     /// - end of file
     fn read_arr<const SIZE: usize>(&mut self) -> Result<[u8; SIZE]>;
-
-    /// Parses the argument as a length.
-    ///
-    /// Useful for byte strings, text strings, arrays, and maps.
-    ///
-    /// # Errors
-    ///
-    /// Errors include:
-    ///
-    /// - malformatted input
-    /// - end of file
-    fn parse_len(&mut self, init_byte: u8) -> Result<Option<usize>>;
 
     /// Parses the next 2 bytes as a `u16`.
     ///
@@ -235,41 +222,6 @@ where
         }
         Ok(arr)
     }
-
-    fn parse_len(&mut self, init_byte: u8) -> Result<Option<usize>> {
-        let addtl_info = init_byte & ADDTL_INFO_MASK;
-        let len: usize = match addtl_info {
-            0..24 => usize::from(addtl_info),
-            24 => {
-                let val = self.parse_next()?;
-                usize::from(val)
-            }
-            25 => {
-                let val = self.parse_u16()?;
-                usize::from(val)
-            }
-            26 => {
-                let val = self.parse_u32()?;
-                usize::try_from(val).map_err(|_| Error::new(ErrorKind::InvalidLen))?
-            }
-            27 => {
-                let val = self.parse_u64()?;
-                usize::try_from(val).map_err(|_| Error::new(ErrorKind::InvalidLen))?
-            }
-            28..=30 => {
-                return Err(Error::new(ErrorKind::NotWellFormed));
-            }
-            31 => {
-                // Indefinite length
-                return Ok(None);
-            }
-            _ => {
-                unreachable!()
-            }
-        };
-
-        Ok(Some(len))
-    }
 }
 
 /// A wrapper to implement this crate's [Read] trait for byte slices.
@@ -342,42 +294,5 @@ impl<'a> Read<'a> for SliceRead<'a> {
         let val: [u8; SIZE] = array::from_fn(|offset| self.slice[self.byte_offset + offset]);
         self.byte_offset += SIZE;
         Ok(val)
-    }
-
-    fn parse_len(&mut self, init_byte: u8) -> Result<Option<usize>> {
-        let addtl_info = init_byte & ADDTL_INFO_MASK;
-        let len: usize = match addtl_info {
-            0..24 => usize::from(addtl_info),
-            24 => {
-                let val = self
-                    .next()
-                    .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue))??;
-                usize::from(val)
-            }
-            25 => {
-                let val = self.parse_u16()?;
-                usize::from(val)
-            }
-            26 => {
-                let val = self.parse_u32()?;
-                usize::try_from(val).map_err(|_| Error::new(ErrorKind::InvalidLen))?
-            }
-            27 => {
-                let val = self.parse_u64()?;
-                usize::try_from(val).map_err(|_| Error::new(ErrorKind::InvalidLen))?
-            }
-            28..=30 => {
-                return Err(Error::new(ErrorKind::NotWellFormed));
-            }
-            31 => {
-                // Indefinite length
-                return Ok(None);
-            }
-            _ => {
-                unreachable!()
-            }
-        };
-
-        Ok(Some(len))
     }
 }
