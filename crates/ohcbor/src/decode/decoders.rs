@@ -294,14 +294,14 @@ where
             IB_BYTE_STR_FOUR_BYTES => {
                 let len = self.read.parse_u32()?;
                 let len = usize::try_from(len).map_err(|_| {
-                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                    Self::Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
                 })?;
                 self.parse_byte_str(visitor, len)
             }
             IB_BYTE_STR_EIGHT_BYTES => {
                 let len = self.read.parse_u64()?;
                 let len = usize::try_from(len).map_err(|_| {
-                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                    Self::Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
                 })?;
                 self.parse_byte_str(visitor, len)
             }
@@ -329,14 +329,14 @@ where
             IB_TEXT_STR_FOUR_BYTES => {
                 let len = self.read.parse_u32()?;
                 let len = usize::try_from(len).map_err(|_| {
-                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                    Self::Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
                 })?;
                 self.parse_text_str(visitor, len)
             }
             IB_TEXT_STR_EIGHT_BYTES => {
                 let len = self.read.parse_u64()?;
                 let len = usize::try_from(len).map_err(|_| {
-                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                    Self::Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
                 })?;
                 self.parse_text_str(visitor, len)
             }
@@ -364,14 +364,14 @@ where
             IB_ARRAY_FOUR_BYTES => {
                 let remaining = self.read.parse_u32()?;
                 let remaining = usize::try_from(remaining).map_err(|_| {
-                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                    Self::Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
                 })?;
                 self.parse_array(visitor, Some(remaining))
             }
             IB_ARRAY_EIGHT_BYTES => {
                 let remaining = self.read.parse_u64()?;
                 let remaining = usize::try_from(remaining).map_err(|_| {
-                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                    Self::Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
                 })?;
                 self.parse_array(visitor, Some(remaining))
             }
@@ -392,14 +392,14 @@ where
             IB_MAP_FOUR_BYTES => {
                 let remaining = self.read.parse_u32()?;
                 let remaining = usize::try_from(remaining).map_err(|_| {
-                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                    Self::Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
                 })?;
                 self.parse_map(visitor, Some(remaining))
             }
             IB_MAP_EIGHT_BYTES => {
                 let remaining = self.read.parse_u64()?;
                 let remaining = usize::try_from(remaining).map_err(|_| {
-                    Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
+                    Self::Error::invalid_value(Unexpected::Int, &"value is larger than usize::MAX")
                 })?;
                 self.parse_map(visitor, Some(remaining))
             }

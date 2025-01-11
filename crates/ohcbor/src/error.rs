@@ -70,6 +70,13 @@ impl From<Error> for std::io::Error {
     }
 }
 
+#[cfg(feature = "std")]
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        Error::new(ErrorKind::Io(error))
+    }
+}
+
 struct ErrorImpl {
     kind: ErrorKind,
 }

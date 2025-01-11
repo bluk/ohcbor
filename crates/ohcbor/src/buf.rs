@@ -11,6 +11,9 @@ use std::vec::Vec;
 /// some cases, a `Vec<u8>` could be used to allow a dynamically sized buffer,
 /// but in other cases, a fixed size buffer may be used.
 pub trait Buffer {
+    /// Error type for the buffer
+    type Error;
+
     /// Clears the existing contents of the buffer.
     fn clear(&mut self);
 
@@ -21,7 +24,11 @@ pub trait Buffer {
     fn reserve(&mut self, additional: usize);
 
     /// Appends a value to the buffer.
-    fn push(&mut self, value: u8);
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if data cannot be pushed to the buffer.
+    fn push(&mut self, value: u8) -> Result<(), Self::Error>;
 
     /// Returns the buffer as a slice.
     fn as_slice(&self) -> &[u8];
@@ -31,6 +38,8 @@ impl<B> Buffer for &mut B
 where
     B: Buffer,
 {
+    type Error = B::Error;
+
     #[inline]
     fn clear(&mut self) {
         (**self).clear();
@@ -47,8 +56,8 @@ where
     }
 
     #[inline]
-    fn push(&mut self, value: u8) {
-        (**self).push(value);
+    fn push(&mut self, value: u8) -> Result<(), B::Error> {
+        (**self).push(value)
     }
 
     #[inline]
@@ -59,6 +68,8 @@ where
 
 #[cfg(any(feature = "alloc", feature = "std"))]
 impl Buffer for Vec<u8> {
+    type Error = core::convert::Infallible;
+
     #[inline]
     fn clear(&mut self) {
         Vec::clear(self);
@@ -75,8 +86,9 @@ impl Buffer for Vec<u8> {
     }
 
     #[inline]
-    fn push(&mut self, value: u8) {
+    fn push(&mut self, value: u8) -> Result<(), Self::Error> {
         Vec::push(self, value);
+        Ok(())
     }
 
     #[inline]
@@ -84,6 +96,10 @@ impl Buffer for Vec<u8> {
         Vec::as_slice(self)
     }
 }
+
+/// Error when the slice buffer has run out of space.
+#[derive(Debug, Clone, Copy)]
+pub struct SliceBufError;
 
 /// Buffer represented by a fixed sized slice.
 #[allow(clippy::module_name_repetitions)]
@@ -94,6 +110,8 @@ pub struct SliceBuf<'a> {
 }
 
 impl Buffer for SliceBuf<'_> {
+    type Error = SliceBufError;
+
     #[inline]
     fn clear(&mut self) {
         self.len = 0;
@@ -110,13 +128,14 @@ impl Buffer for SliceBuf<'_> {
     }
 
     #[inline]
-    fn push(&mut self, value: u8) {
+    fn push(&mut self, value: u8) -> Result<(), Self::Error> {
         if self.len == self.reserved.len() {
-            todo!()
+            return Err(SliceBufError);
         }
 
         self.reserved[self.len] = value;
         self.len += 1;
+        Ok(())
     }
 
     #[inline]

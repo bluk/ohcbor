@@ -206,10 +206,9 @@ where
         buf.reserve(len);
 
         for _ in 0..len {
-            buf.push(
-                self.next()
-                    .ok_or_else(|| Error::new(ErrorKind::EofWhileParsingValue))??,
-            );
+            buf.push(self.parse_next()?).map_err(|_| {
+                io::Error::new(io::ErrorKind::OutOfMemory, "buffer is out of space")
+            })?;
         }
 
         Ok(Ref::Buffer(buf))
