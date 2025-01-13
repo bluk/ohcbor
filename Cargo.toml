@@ -15,7 +15,7 @@ half = { version = "2.4.1", default-features = false }
 hex-literal = "0.4.1"
 ohcbor = { path = "./crates/ohcbor", version = "0.0.0" }
 ordered-float = { version = "4.6.0", default-features = false }
-proc-macro2 = "1.0.89"
+proc-macro2 = "1.0.93"
 proptest = "1.6.0"
 quote = "1.0.37"
 rayon = "1.10.0"
